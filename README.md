@@ -20,8 +20,8 @@ Rešitev je namenjena strokovnjakom, ki želijo svoje znanje deliti z drugimi tr
 Aplikacija je sestavljena iz treh ločenih storitev (frontend, backend, baza), ki jih zažene Docker Compose. Brskalnik komunicira samo s frontendom (nginx), ta pa zahtevke na `/api/*` posreduje backendu. Samo backend se povezuje z bazo PostgreSQL in bere zgodovinske podatke formata Parquet.
 
 ## Uporabljene tehnologije
-- **Frontend:** TypeScript, Vite, nginx
+- **Frontend:** TypeScript, Vite, nginx server
 - **Backend:** Node.js 24, TypeScript, REST API, JWT token, BCrypt
 - **Podatki:** PostgreSQL 16, Parquet in DuckDB
 - **Skripte:** Python
-- **Okolje:** Docker in Docker Compose
+- **Okolje:** Docker in Docker Compose virtualno okolje
