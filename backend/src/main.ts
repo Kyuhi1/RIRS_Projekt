@@ -1,15 +1,12 @@
-import { createServer } from 'node:http';
+import { fileURLToPath } from 'node:url';
+import { createApp } from './app.ts';
+import { createPool } from './db.ts';
+import { migrate } from './migrate.ts';
 
 const port = Number(process.env.PORT ?? 3000);
 
-const server = createServer((req, res) => {
-  if (req.method === 'GET' && req.url === '/api/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok' }));
-    return;
-  }
-  res.writeHead(404, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ error: 'Not found' }));
-});
+const pool = createPool();
+const applied = await migrate(pool, fileURLToPath(new URL('../db/migrations', import.meta.url)));
+console.log(applied.length ? `Izvedene migracije: ${applied.join(', ')}` : 'Baza je posodobljena');
 
-server.listen(port, () => console.log(`Backend posluša na portu ${port}`));
+createApp().listen(port, () => console.log(`Backend posluša na portu ${port}`));
