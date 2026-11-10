@@ -228,12 +228,30 @@ Telo zahtevka `POST /api/backtests` (JSON):
 | `venue_id` | obvezno; borza |
 | `from`, `to` | obvezna, `YYYY-MM-DD`; `from` mora biti pred `to`, obdobje pa v razponu podatkov vseh izbranih sredstev (po dnevih, UTC) |
 | `params` | neobvezno; objekt, ki se združi s `default_params` strategije samo za ta test (strategija ostane nespremenjena) |
+| `prop_plan_id` | neobvezno; načrt financiranega računa (`prop_plans`); prazna vrednost pomeni brez načrta (poglavje »Pravila financiranega računa«) |
 
-Odgovori ob napaki: `400` z `{ "errors": { "<polje>": "<sporočilo>" } }` pri neveljavnem vhodu (polja `strategy_id`, `instruments`, `venue_id`, `from`, `to`, `params` in `period`; pri obdobju zunaj podatkov sporočilo vsebuje veljaven razpon) in `422` z `{ "error": "<razlog>" }`, če strategija vrže napako, preseže čas ali vrne neveljavne posle. V obeh primerih se test ne shrani, sporočilo pa ne vsebuje notranjih podrobnosti strežnika.
+Odgovori ob napaki: `400` z `{ "errors": { "<polje>": "<sporočilo>" } }` pri neveljavnem vhodu (polja `strategy_id`, `instruments`, `venue_id`, `from`, `to`, `params`, `prop_plan_id` in `period`; pri obdobju zunaj podatkov sporočilo vsebuje veljaven razpon) in `422` z `{ "error": "<razlog>" }`, če strategija vrže napako, preseže čas ali vrne neveljavne posle. V obeh primerih se test ne shrani, sporočilo pa ne vsebuje notranjih podrobnosti strežnika.
 
 Izračun: strategija teče v delavcu za vsako izbrano sredstvo (skupna omejitev 60 s), nato `simulate` (poglavje »Simulacija«) izračuna rezultat z borzo in razponi iz baze. Začetni kapital testa je 10.000 in se enakomerno razdeli med izbrana sredstva. V `results` so metrike (`netProfit`, `returnPct`, `tradeCount`, `winRatePct`, `maxDrawdownPct`), bruto dobiček in stroški (`grossProfit`, `costs`), dnevna krivulja (`equityCurve`) in posli (`trades`). Posli so shranjeni v `results`, vendar jih `GET /api/backtests/:id` ne vrne; berejo se po straneh preko `/trades`.
 
 Omejitev obsega: backend pred nalaganjem prešteje svečke v izbranem obdobju in zavrne test, če jih je za katerokoli sredstvo več kot `MAX_BARS` (400.000, pri minutnih podatkih okoli 9 mesecev). Odgovor je `400` z `errors.period` (»Obdobje za <TICKER> vsebuje N svečk, dovoljenih je največ 400.000. Izberite krajše obdobje.«). Brez omejitve bi backend pri milijonih svečk zmanjkalo pomnilnika.
+
+### Pravila financiranega računa
+
+Če test izbere načrt (`prop_plan_id`), se izvede s kapitalom računa (`account_size`) namesto z začetnim kapitalom 10.000, nato pa `checkChallenge` (`propRules.ts`) iz dnevne krivulje (poglavje »Dnevna krivulja«) preveri tri pravila. Test se vedno izvede do konca obdobja, kršitev ga ne ustavi.
+
+| Pravilo | Dosežen znesek | Izpolnjeno, če |
+|---|---|---|
+| Cilj dobička (`profit_target`) | neto dobiček ob koncu obdobja | dobiček je najmanj `profit_target` |
+| Največja dnevna izguba (`max_daily_loss`) | največji dnevni padec vrednosti | nobeden dan ne izgubi več kot `max_daily_loss` |
+| Največja skupna izguba (`max_total_loss`) | največji padec pod začetno stanje računa | vrednost nikoli ne pade za več kot `max_total_loss` pod `account_size` |
+
+- **Dnevna izguba** je razlika med vrednostjo ob koncu prejšnjega dneva in vrednostjo ob koncu tega dneva (prvi dan se meri od začetnega stanja računa). **Skupna izguba** se meri glede na začetno stanje računa.
+- Izguba, ki je enaka dovoljeni, še ni kršitev; kršitev je izguba, večja od dovoljene. Zneski se primerjajo zaokroženi na cente.
+- Pri kršitvi dnevne ali skupne izgube je zabeležen datum prve kršitve (`firstViolation`, `YYYY-MM-DD`).
+- Krivulja je dnevna in vsebuje samo realizirane rezultate, zato znotrajdnevnih padcev ne zazna.
+
+Rezultati so v `results.challenge`: `{ passed, profitTarget, maxDailyLoss, maxTotalLoss }`, kjer ima vsako pravilo `{ achieved, allowed, passed, firstViolation }`. Skupni izid se shrani tudi v stolpec `challenge_passed` (`true` samo, če so izpolnjena vsa tri pravila), načrt pa v `prop_plan_id`. **Brez načrta** sta oba stolpca prazna (`NULL`) in razdelka `results.challenge` ni; baza to zagotavlja z omejitvijo `CHECK` (`challenge_passed` je prazen natanko takrat, ko je prazen `prop_plan_id`). Odgovora `GET /api/backtests` in `GET /api/backtests/:id` vsebujeta `challenge_passed` in `prop_plan` (ime in pravila načrta ali `null`).
 
 ### Stran Backtests (frontend)
 
