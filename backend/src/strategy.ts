@@ -6,32 +6,57 @@ import type { Trade } from './simulation.ts';
 export class StrategyError extends Error {}
 
 export interface RunOptions {
-  timeoutMs?: number;
+  timeoutMs?: number; // največji čas izvajanja, privzeto 60 s
+  memoryMb?: number; // največ pomnilnika delavca, privzeto 128 MB
 }
 
 const WORKER = new URL('./strategyWorker.ts', import.meta.url);
 const MAX_MESSAGE = 300;
+const KILL_GRACE_MS = 1_000; // rezerva, preden delavca ustavimo od zunaj
 
 // Zažene strategijo `export default (bars, params) => trades[]` v ločenem delavcu in vrne njene posle.
 // Delavec dobi samo svečke in parametre; backendu vrne samo rezultat.
 export function runStrategy(source: string, bars: Candle[], params: unknown, options: RunOptions = {}): Promise<Trade[]> {
   const timeoutMs = options.timeoutMs ?? 60_000;
+  const memoryMb = options.memoryMb ?? 128;
+  const timeoutMessage = `Strategija je presegla časovno omejitev (${Math.round(timeoutMs / 100) / 10} s)`;
   const input = JSON.stringify([bars, params ?? {}]);
 
   return new Promise((resolve, reject) => {
     const worker = new Worker(WORKER, {
       workerData: { source, input, timeoutMs },
       env: {}, // delavec ne vidi spremenljivk okolja (DATABASE_URL, JWT_SECRET ...)
+      resourceLimits: { maxOldGenerationSizeMb: memoryMb, maxYoungGenerationSizeMb: 16 },
     });
 
-    worker.once('message', (message: { trades?: Trade[]; error?: string }) => {
-      if (message.error !== undefined) reject(new StrategyError(`Strategija je vrnila napako: ${message.error.slice(0, MAX_MESSAGE)}`));
-      else resolve(message.trades ?? []);
-    });
-    worker.once('error', (err) => {
-      console.error(err); // podrobnosti samo v dnevnik strežnika
-      reject(new StrategyError('Strategije ni bilo mogoče izvesti'));
-    });
-    worker.once('exit', () => reject(new StrategyError('Strategije ni bilo mogoče izvesti')));
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(killTimer);
+      void worker.terminate(); // konča samo tega delavca, backend teče naprej
+      fn();
+    };
+    // Zadnja varovalka, če delavec ne odgovori (vm časovna omejitev je znotraj delavca).
+    const killTimer = setTimeout(() => finish(() => reject(new StrategyError(timeoutMessage))), timeoutMs + KILL_GRACE_MS);
+
+    worker.once('message', (message: { trades?: Trade[]; error?: string }) =>
+      finish(() => {
+        if (message.error === 'TIMEOUT') reject(new StrategyError(timeoutMessage));
+        else if (message.error !== undefined) reject(new StrategyError(`Strategija je vrnila napako: ${message.error.slice(0, MAX_MESSAGE)}`));
+        else resolve(message.trades ?? []);
+      }),
+    );
+    worker.once('error', (err) =>
+      finish(() => {
+        if ((err as { code?: string }).code === 'ERR_WORKER_OUT_OF_MEMORY') {
+          reject(new StrategyError(`Strategija je presegla pomnilniško omejitev (${memoryMb} MB)`));
+        } else {
+          console.error(err); // podrobnosti samo v dnevnik strežnika
+          reject(new StrategyError('Strategije ni bilo mogoče izvesti'));
+        }
+      }),
+    );
+    worker.once('exit', () => finish(() => reject(new StrategyError('Strategije ni bilo mogoče izvesti'))));
   });
 }

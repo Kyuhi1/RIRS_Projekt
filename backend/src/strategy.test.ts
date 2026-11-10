@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Candle } from './candles.ts';
-import { runStrategy, StrategyError } from './strategy.ts';
+import { runStrategy, StrategyError, type RunOptions } from './strategy.ts';
 
 const bar = (i: number, close: number): Candle => ({ time: Date.UTC(2024, 0, 1 + i), open: close, high: close, low: close, close, volume: 1 });
 const BARS = [bar(0, 100), bar(1, 110), bar(2, 120)];
 
-const rejectsWith = (source: string, pattern: RegExp, params: unknown = {}) =>
-  assert.rejects(runStrategy(source, BARS, params), (err) => err instanceof StrategyError && pattern.test(err.message));
+const rejectsWith = (source: string, pattern: RegExp, params: unknown = {}, options: RunOptions = {}) =>
+  assert.rejects(runStrategy(source, BARS, params, options), (err) => err instanceof StrategyError && pattern.test(err.message));
+const GOOD = 'export default () => [];';
 
 test('pravilna strategija dobi svečke in parametre ter vrne posle', async () => {
   const source = `export default (bars, params) => [{
@@ -41,4 +42,26 @@ test('sintaksna napaka, manjkajoč export default in napačen izhod so razumljiv
   await rejectsWith('const x = 1;', /export default/);
   await rejectsWith('export default () => 42', /seznam poslov/);
   await rejectsWith('export default async () => []', /seznam poslov/);
+});
+
+test('neskončna zanka se prekine po časovni omejitvi in backend teče naprej', async () => {
+  const started = Date.now();
+  await rejectsWith('export default () => { while (true) {} }', /časovno omejitev/, {}, { timeoutMs: 300 });
+  assert.ok(Date.now() - started < 3_000);
+  assert.deepEqual(await runStrategy(GOOD, BARS, {}), []);
+});
+
+test('zanka v obljubah in zlonamerna napaka z getterjem sta prav tako prekinjeni', async () => {
+  await rejectsWith('export default () => { (function loop() { Promise.resolve().then(loop); })(); return []; }', /časovno omejitev/, {}, { timeoutMs: 300 });
+  await rejectsWith('export default () => { throw { get message() { while (true); } }; }', /časovno omejitev/, {}, { timeoutMs: 300 });
+});
+
+test('sporočilo o časovni omejitvi navede mejo', async () => {
+  await rejectsWith('export default () => { while (true) {} }', /\(0\.3 s\)/, {}, { timeoutMs: 300 });
+});
+
+test('prekoračitev pomnilnika prekine samo delavca, backend teče naprej', async () => {
+  const hog = 'export default () => { const a = []; while (true) a.push(new Array(100000).fill(1)); }';
+  await rejectsWith(hog, /pomnilniško omejitev \(32 MB\)/, {}, { memoryMb: 32, timeoutMs: 20_000 });
+  assert.deepEqual(await runStrategy(GOOD, BARS, {}), []);
 });
