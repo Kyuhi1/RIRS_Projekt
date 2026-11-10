@@ -107,6 +107,52 @@ Administratorski račun backend ob zagonu ustvari iz `ADMIN_EMAIL` in `ADMIN_PAS
 
 Frontend po prijavi preusmeri uporabnika glede na vlogo: Trgovec na Strategije, Mentor na Dashboard, Administrator na Database. Glava prikazuje navigacijo vloge (Trgovec: Strategije, Backtests, Mentor; Mentor: Dashboard, Učenci, Analitika; Administrator: Database) in uporabniški meni z odjavo. Neprijavljen uporabnik je preusmerjen na prijavo. Preverjanje v brskalniku je samo udobje, dostop dejansko odloča backend.
 
+## Simulacija
+
+Simulator (`backend/src/simulation.ts`, funkcija `simulate`) iz poslov strategije, borze in začetnega kapitala izračuna metrike, stroške in dnevno krivuljo vrednosti računa. Ne uporablja baze: borzo in razpone dobi kot vhodne podatke (vrednosti iz tabel `venues` in `spreads`).
+
+### Pogodba strategije
+
+```ts
+export default (bars, params) => trades[]
+```
+
+Posel je `{ side, entryTime, exitTime, entryPrice, exitPrice, orderType }`:
+
+| Polje | Pomen |
+|---|---|
+| `side` | `long` ali `short` |
+| `entryTime`, `exitTime` | čas vstopa in izstopa v ms od 1970 (UTC) |
+| `entryPrice`, `exitPrice` | ceni vstopa in izstopa, večji od 0 |
+| `orderType` | `maker` ali `taker`, privzeto `taker` |
+
+Posli enega sredstva se ne smejo prekrivati (naslednji vstop ni pred prejšnjim izstopom) in morajo biti znotraj obdobja testa, sicer simulator vrne napako.
+
+### Pravila simulacije
+
+- **Velikost pozicije:** celoten kapital sredstva, brez vzvoda: `količina = kapital sredstva / entryPrice`. Kapital sredstva se ob vsakem poslu vzame ponovno iz začetne vrednosti, zato velikost posla ne zavisi od prejšnjih dobičkov ali stroškov in je bruto dobiček pri vseh borzah enak.
+- **Več sredstev:** začetni kapital se razdeli enakomerno (`kapital / število sredstev`).
+- **Dobiček posla (bruto):** `smer * (exitPrice - entryPrice) * količina`, kjer je smer +1 za `long` in −1 za `short`.
+- **Provizija:** `maker_pct` pri `orderType = maker` in `taker_pct` pri `taker`, kot delež vrednosti posla na stran: `pct * količina * (entryPrice + exitPrice)`.
+- **Razpon:** pri borzi s `pay_spread = true` se pri vsakem poslu enkrat odšteje `razpon * količina`. Razpon je v ceni sredstva in se vzame iz tabele `spreads` za sredstvo in leto vstopa (UTC). Če podatka ni, simulator vrne napako. Pri `pay_spread = false` se razpon ne upošteva.
+- **Neto:** neto dobiček posla = bruto − provizija − razpon.
+
+### Metrike
+
+| Metrika | Definicija |
+|---|---|
+| Bruto dobiček | vsota bruto dobičkov vseh poslov |
+| Skupni stroški | vsota provizij in razponov (rezultat jih vrne tudi ločeno: `costs.commission`, `costs.spread`) |
+| Neto dobiček | bruto dobiček − skupni stroški |
+| Donosnost (%) | `neto dobiček / začetni kapital * 100` |
+| Število poslov | število vseh poslov vseh sredstev |
+| Delež dobičkonosnih poslov (%) | `posli z neto dobičkom > 0 / vsi posli * 100`, 0 brez poslov |
+| Največji padec kapitala (%) | največji padec od vrha do dna na dnevni krivulji: `max((vrh − vrednost) / vrh * 100)`, kjer je vrh največja dosedanja vrednost (vključno z začetnim kapitalom) |
+
+### Dnevna krivulja
+
+`equityCurve` ima točko `{ date, value }` za vsak dan obdobja testa od prvega do zadnjega (UTC). Vrednost dneva je vsota stanj sredstev ob koncu dneva. Stanje sredstva se spremeni na dan izstopa posla za neto dobiček posla (krivulja prikazuje realizirane rezultate, odprte pozicije se ne vrednotijo po tržni ceni). Dnevi brez poslov prenesejo prejšnje stanje.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:
