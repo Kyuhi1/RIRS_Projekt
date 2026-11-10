@@ -22,7 +22,7 @@ interface Ctx {
   pool: Pool;
   user: User;
   strategyId: (name: string) => Promise<number>;
-  run: (input: Record<string, unknown>, timeoutMs?: number) => ReturnType<typeof computeBacktest>;
+  run: (input: Record<string, unknown>, timeoutMs?: number, maxBars?: number) => ReturnType<typeof computeBacktest>;
 }
 
 // Okolje: migracije, trgovec, Parquet za BTCUSDT, ETHUSDT in EURUSD (3 dni) ter mapa brez podatkov za ostala sredstva.
@@ -41,7 +41,7 @@ async function withCtx(fn: (ctx: Ctx) => Promise<void>): Promise<void> {
         pool,
         user,
         strategyId: async (name) => Number((await pool.query('SELECT id FROM strategies WHERE name = $1', [name])).rows[0].id),
-        run: (input, timeoutMs) => computeBacktest(pool, store, user, input, { timeoutMs }),
+        run: (input, timeoutMs, maxBars) => computeBacktest(pool, store, user, input, { timeoutMs, maxBars }),
       });
     });
   } finally {
@@ -191,5 +191,18 @@ test('napaka strategije, prekoračen čas in tuja zasebna strategija ne dajo rez
     await rejection(ctx.run(await request(ctx, { strategy_id: foreign })), 400, (b) => assert.ok(b.errors.strategy_id));
     const shared = await insert(other, 'export default () => []', 'shared');
     assert.equal((await ctx.run(await request(ctx, { strategy_id: shared }))).results.tradeCount, 0);
+  });
+});
+
+test('obdobje z preveč svečkami je zavrnjeno, še preden se svečke naložijo, in vrne razumljivo sporočilo', async () => {
+  await withCtx(async (ctx) => {
+    // 3 dni minutnih svečk = 4320; z omejitvijo 4319 test ne sme steči, z 4320 mora
+    await rejection(ctx.run(await request(ctx), undefined, 4319), 400, (b) => {
+      assert.match(b.errors.period, /Obdobje za BTCUSDT vsebuje 4\.?320 svečk, dovoljenih je največ 4\.?319\. Izberite krajše obdobje\./);
+    });
+    assert.equal((await ctx.run(await request(ctx), undefined, 4320)).results.tradeCount, 1);
+
+    // štejejo samo svečke v izbranem obdobju: en dan je 1440 svečk
+    assert.equal((await ctx.run(await request(ctx, { from: '2024-01-02' }), undefined, 2880)).results.tradeCount, 1);
   });
 });

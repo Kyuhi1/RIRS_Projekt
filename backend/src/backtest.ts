@@ -8,6 +8,9 @@ import { runStrategy, StrategyError } from './strategy.ts';
 export const INITIAL_CAPITAL = 10_000;
 const MAX_RUNTIME_MS = 60_000; // skupni čas strategij za vsa sredstva
 const MAX_INSTRUMENTS = 30;
+// Največ svečk na sredstvo. Svečke se naložijo v pomnilnik in prenesejo v delavca; pri več milijonih
+// minutnih svečk bi backend zmanjkalo pomnilnika. 400.000 svečk je okoli 9 mesecev minutnih podatkov.
+export const MAX_BARS = 400_000;
 const DAY_MS = 86_400_000;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -81,10 +84,11 @@ export async function computeBacktest(
   store: CandleStore,
   user: User,
   input: unknown,
-  options: { timeoutMs?: number } = {},
+  options: { timeoutMs?: number; maxBars?: number } = {},
 ): Promise<ComputedBacktest> {
   const startedAt = Date.now();
   const deadlineMs = options.timeoutMs ?? MAX_RUNTIME_MS;
+  const maxBars = options.maxBars ?? MAX_BARS;
   const fail = (errors: Errors) => new BacktestError(400, { errors });
 
   const request = parse(input);
@@ -118,6 +122,14 @@ export async function computeBacktest(
   }
   if (lo > hi) throw fail({ period: 'Izbrana sredstva nimajo skupnega razpona podatkov' });
   if (request.from < lo || request.to > hi) throw fail({ period: `Obdobje mora biti v razponu podatkov: ${lo} do ${hi}` });
+
+  // Preveč svečk zavrnemo, še preden se naložijo v pomnilnik.
+  for (const ticker of request.instruments) {
+    const bars = await store.count(ticker, toMs(request.from), toMs(request.to) + DAY_MS);
+    if (bars > maxBars) {
+      throw fail({ period: `Obdobje za ${ticker} vsebuje ${bars.toLocaleString('sl-SI')} svečk, dovoljenih je največ ${maxBars.toLocaleString('sl-SI')}. Izberite krajše obdobje.` });
+    }
+  }
 
   const defaults = isObject(strategy.default_params) ? strategy.default_params : {};
   const params = { ...defaults, ...request.params }; // default_params strategije ostanejo nespremenjeni
