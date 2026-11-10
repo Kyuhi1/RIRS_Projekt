@@ -19,6 +19,10 @@ export interface PropPlan {
   id: string;
   firm_name: string;
   plan_name: string;
+  account_size: number;
+  profit_target: number;
+  max_daily_loss: number;
+  max_total_loss: number;
 }
 export interface Strategy {
   id: number;

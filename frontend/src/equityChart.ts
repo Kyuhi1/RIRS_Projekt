@@ -15,8 +15,14 @@ function el(name: string, attrs: Record<string, string | number>, text?: string)
   return node;
 }
 
-// Krivulja vrednosti računa za celotno obdobje testa (WF-03). Črtkana črta je začetni kapital.
-export function renderEquityChart(container: HTMLElement, curve: EquityPoint[], initialCapital: number): void {
+export interface Marker {
+  date: string; // YYYY-MM-DD; označi se, če je na krivulji
+  label: string;
+}
+
+// Krivulja vrednosti računa za celotno obdobje testa (WF-03). Črtkana črta je začetni kapital,
+// rdeče navpične črte so označene kršitve pravil financiranega računa.
+export function renderEquityChart(container: HTMLElement, curve: EquityPoint[], initialCapital: number, markers: Marker[] = []): void {
   container.replaceChildren();
   if (curve.length === 0) {
     container.textContent = 'Krivulja ni na voljo.';
@@ -39,6 +45,17 @@ export function renderEquityChart(container: HTMLElement, curve: EquityPoint[], 
   }
   svg.append(el('line', { x1: PAD.left, x2: W - PAD.right, y1: y(initialCapital), y2: y(initialCapital), class: 'baseline' }));
   svg.append(el('polyline', { points: curve.map((p, i) => `${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' '), class: 'line' }));
+  const byDate = new Map<string, string[]>();
+  for (const m of markers) byDate.set(m.date, [...(byDate.get(m.date) ?? []), m.label]);
+  for (const [date, labels] of byDate) {
+    const index = curve.findIndex((p) => p.date === date);
+    if (index < 0) continue;
+    const mx = x(index);
+    const side = mx > W - 160 ? 'end' : 'start'; // besedilo se ne sme izteči iz grafa
+    svg.append(el('line', { x1: mx, x2: mx, y1: PAD.top, y2: H - PAD.bottom, class: 'violation' }));
+    svg.append(el('circle', { cx: mx, cy: y(curve[index]!.value), r: 4, class: 'violation-dot' }));
+    svg.append(el('text', { x: mx + (side === 'end' ? -6 : 6), y: PAD.top + 12, 'text-anchor': side, class: 'violation-label' }, `${date}: ${labels.join(', ')}`));
+  }
   if (curve.length === 1) svg.append(el('circle', { cx: x(0), cy: y(curve[0]!.value), r: 3, class: 'dot' }));
   svg.append(el('text', { x: PAD.left, y: H - 8, class: 'axis' }, curve[0]!.date));
   svg.append(el('text', { x: W - PAD.right, y: H - 8, 'text-anchor': 'end', class: 'axis' }, curve[curve.length - 1]!.date));

@@ -1,5 +1,5 @@
 import { errorMessage, getJson } from './api';
-import { renderEquityChart, type EquityPoint } from './equityChart';
+import { renderEquityChart, type EquityPoint, type Marker } from './equityChart';
 import { renderTrades } from './trades';
 
 interface Venue {
@@ -9,6 +9,18 @@ interface Venue {
   taker_pct: number;
   pay_spread: boolean;
 }
+interface Rule {
+  achieved: number;
+  allowed: number;
+  passed: boolean;
+  firstViolation: string | null;
+}
+interface Challenge {
+  passed: boolean;
+  profitTarget: Rule;
+  maxDailyLoss: Rule;
+  maxTotalLoss: Rule;
+}
 interface BacktestDetail {
   id: number;
   strategy_name: string;
@@ -17,6 +29,7 @@ interface BacktestDetail {
   from: string;
   to: string;
   params: Record<string, unknown>;
+  prop_plan: { id: string; firm_name: string; plan_name: string } | null;
   status: string;
   visibility: 'private' | 'shared';
   results: {
@@ -30,6 +43,7 @@ interface BacktestDetail {
     winRatePct: number;
     maxDrawdownPct: number;
     equityCurve: EquityPoint[];
+    challenge?: Challenge; // samo, če je bil izbran načrt financiranega računa
   };
 }
 
@@ -67,6 +81,33 @@ function section(title: string, ...content: (HTMLElement | string)[]): HTMLEleme
   const box = make('section', 'card');
   box.append(make('h3', undefined, title), ...content.map((c) => (typeof c === 'string' ? make('p', 'hint', c) : c)));
   return box;
+}
+
+const plain = (value: number) => value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Blok »Pravila financiranega računa«: za vsako pravilo dosežen in dovoljen znesek, izid in datum prve kršitve.
+function rulesSection(challenge: Challenge): HTMLElement {
+  const rows: [string, string, Rule][] = [
+    ['Cilj dobička', 'najmanj', challenge.profitTarget],
+    ['Največja dnevna izguba', 'največ', challenge.maxDailyLoss],
+    ['Največja skupna izguba', 'največ', challenge.maxTotalLoss],
+  ];
+  const table = make('table', 'rules');
+  table.innerHTML = '<thead><tr><th>Pravilo</th><th>Doseženo</th><th>Dovoljeno</th><th>Izid</th><th>Prva kršitev</th></tr></thead>';
+  const body = table.createTBody();
+  for (const [label, bound, rule] of rows) {
+    const row = body.insertRow();
+    row.insertCell().textContent = label;
+    row.insertCell().textContent = plain(rule.achieved);
+    row.insertCell().textContent = `${bound} ${plain(rule.allowed)}`;
+    const outcome = row.insertCell();
+    outcome.className = rule.passed ? 'positive' : 'negative';
+    outcome.textContent = rule.passed ? 'Izpolnjeno' : 'Kršeno';
+    row.insertCell().textContent = rule.firstViolation ?? '–';
+  }
+  const verdict = make('p', challenge.passed ? 'positive' : 'negative');
+  verdict.append(make('strong', undefined, challenge.passed ? 'Izziv opravljen: vsa tri pravila so izpolnjena.' : 'Izziv ni opravljen: vsaj eno pravilo ni izpolnjeno.'));
+  return section('Pravila financiranega računa', table, verdict);
 }
 
 // Stran rezultatov testa (WF-03): glava z nastavitvami, metrike, krivulja, stroški, pravila in posli.
@@ -114,13 +155,16 @@ export async function renderResult(container: HTMLElement, id: string, onUnautho
       ['Borza', venueName],
       ['Obdobje', `${t.from} do ${t.to}`],
       ['Začetni kapital', r.initialCapital.toFixed(2)],
-      ['Financiran račun', 'ni izbran'],
+      ['Financiran račun', t.prop_plan ? `${t.prop_plan.firm_name} – ${t.prop_plan.plan_name}` : 'ni izbran'],
     ]),
   );
 
   const chartBox = make('div');
   const chart = section('Krivulja vrednosti računa', chartBox);
-  renderEquityChart(chartBox, r.equityCurve, r.initialCapital);
+  const markers: Marker[] = [];
+  if (r.challenge?.maxDailyLoss.firstViolation) markers.push({ date: r.challenge.maxDailyLoss.firstViolation, label: 'dnevna izguba' });
+  if (r.challenge?.maxTotalLoss.firstViolation) markers.push({ date: r.challenge.maxTotalLoss.firstViolation, label: 'skupna izguba' });
+  renderEquityChart(chartBox, r.equityCurve, r.initialCapital, markers);
 
   const costs = section(
     'Stroški borze',
@@ -131,13 +175,14 @@ export async function renderResult(container: HTMLElement, id: string, onUnautho
       ['Neto dobiček', money(r.netProfit)],
     ]),
   );
-  const rules = section('Pravila financiranega računa', 'Preverjanje pravil še ni na voljo; napolni se ob izbiri financiranega računa.');
 
   const tradesBox = make('div');
   const trades = section('Posli', tradesBox);
 
-  const cards = make('div', 'cards-two');
-  cards.append(costs, rules);
+  // Brez načrta razdelka s pravili ni; stroški zasedejo celotno širino.
+  const cards = make('div', r.challenge ? 'cards-two' : '');
+  cards.append(costs);
+  if (r.challenge) cards.append(rulesSection(r.challenge));
   container.append(header, metrics, settings, chart, cards, trades);
   await renderTrades(tradesBox, t.id, onUnauthorized);
 }

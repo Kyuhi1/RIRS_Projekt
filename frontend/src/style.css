@@ -63,3 +63,7 @@ textarea { width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.2
 .button { display: inline-block; padding: 0.4rem 0.9rem; border: 1px solid #ccc; border-radius: 4px; background: #f0f0f0; color: inherit; text-decoration: none; }
 td.actions { white-space: nowrap; }
 td.actions button { margin: 0 0 0 0.5rem; padding: 0.15rem 0.5rem; font-size: 0.85rem; }
+.chart .violation { stroke: #b00020; stroke-dasharray: 3 3; }
+.chart .violation-dot { fill: #b00020; }
+.chart .violation-label { font-size: 11px; fill: #b00020; }
+table.rules { margin-bottom: 0.5rem; }

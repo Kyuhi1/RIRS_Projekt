@@ -257,12 +257,12 @@ Rezultati so v `results.challenge`: `{ passed, profitTarget, maxDailyLoss, maxTo
 
 Stran **Backtests** (trgovec, wireframe WF-02) ima levo obrazec »Nov test«, desno pa »Seznam zagonov«.
 
-- **Obrazec:** strategija, eno ali več sredstev (sredstva brez zgodovinskih podatkov so onemogočena), obdobje Od/Do, borza (prikaže provizije in razpon), financiran račun in nastavitve strategije. Polje za financiran račun je zaenkrat onemogočeno, ker preverjanje pravil še ni uvedeno.
+- **Obrazec:** strategija, eno ali več sredstev (sredstva brez zgodovinskih podatkov so onemogočena), obdobje Od/Do, borza (prikaže provizije in razpon), financiran račun in nastavitve strategije. Financiran račun je neobvezen; ob izbiri se prikažejo njegova pravila, test pa teče s kapitalom računa (poglavje »Pravila financiranega računa«).
 - **Obdobje:** poleg ročnega vnosa datumov so prednastavitve »Celotna zgodovina«, »Zadnje leto«, »Zadnja 3 leta« in »Zadnjih 5 let«. Računajo se iz skupnega razpona podatkov izbranih sredstev, začetek pa ni nikoli pred začetkom podatkov.
 - **Nastavitve strategije:** za vsak privzeti parameter strategije je eno polje. Na backend se pošljejo samo spremenjene vrednosti, ki veljajo samo za ta test; `default_params` strategije ostanejo nespremenjeni.
 - **Napake:** validacijo opravi backend, napake so prikazane ob poljih (npr. veljaven razpon podatkov ob obdobju zunaj podatkov), razlog napake ali prekinitve strategije pa pod gumbom »Zaženi test«, brez notranjih podrobnosti strežnika.
 - **Po zagonu** se odpre stran rezultatov `#backtests/<id>` (poglavje »Stran rezultatov«).
-- **Seznam zagonov:** lastni testi (zagon, obdobje, rezultat, vidnost), najnovejši prvi; klik na vrstico odpre rezultate. Filter po skupini sredstev (`asset_class`: Crypto, Forex, Indeksi, Zlato) in »Vse«; zagon z več sredstvi se prikaže v skupini vsakega svojega sredstva.
+- **Seznam zagonov:** lastni testi (zagon, obdobje, rezultat, vidnost; pri testu z načrtom tudi izid izziva), najnovejši prvi; klik na vrstico odpre rezultate. Filter po skupini sredstev (`asset_class`: Crypto, Forex, Indeksi, Zlato) in »Vse«; zagon z več sredstvi se prikaže v skupini vsakega svojega sredstva.
 
 ### Stran rezultatov (frontend)
 
@@ -270,9 +270,9 @@ Stran `#backtests/<id>` (trgovec, wireframe WF-03) prikazuje:
 
 - **Glavo** z naslovom zagona in stanjem testa (`draft` se prikaže kot »Osnutek«).
 - **Šest metrik:** neto dobiček, donosnost, število poslov, največji padec, delež dobičkonosnih poslov in skupne stroške.
-- **Nastavitve testa:** strategijo, parametre, sredstva, borzo, obdobje, začetni kapital in financiran račun (zaenkrat vedno »ni izbran«).
-- **Krivuljo vrednosti računa** za celotno obdobje (SVG iz dnevne krivulje; črtkana črta je začetni kapital).
-- **Stroške borze** (bruto dobiček, provizije, razpon, neto dobiček) in blok **Pravila financiranega računa**, ki ga napolni naloga za preverjanje pravil.
+- **Nastavitve testa:** strategijo, parametre, sredstva, borzo, obdobje, začetni kapital in financiran račun (»ni izbran«, če načrt ni bil izbran).
+- **Krivuljo vrednosti računa** za celotno obdobje (SVG iz dnevne krivulje; črtkana črta je začetni kapital). Prva kršitev dnevne in skupne izgube je označena z rdečo navpično črto in datumom.
+- **Stroške borze** (bruto dobiček, provizije, razpon, neto dobiček) in, samo če je bil izbran načrt, blok **Pravila financiranega računa**: za vsako pravilo (cilj dobička, največja dnevna izguba, največja skupna izguba) doseženi in dovoljeni znesek, oznaka Izpolnjeno/Kršeno, datum prve kršitve in skupni izid izziva. Brez načrta bloka ni.
 - **Tabelo poslov** (datum, sredstvo, rezultat) po času vstopa s paginacijo po 20; strani prihajajo iz `GET /api/backtests/:id/trades`.
 
 Besedilo iz podatkov (ime strategije, parametri) se vstavlja kot besedilo, ne kot HTML. Neobstoječ ali tuj test prikaže sporočilo »Test ne obstaja«.
