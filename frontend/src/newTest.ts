@@ -71,6 +71,7 @@ export function renderNewTest(container: HTMLElement, ref: Reference, onCreated:
     <form id="new-test" novalidate>
       <label for="strategy">Strategija</label>
       <select id="strategy" name="strategy_id"></select>
+      <p class="hint"><a href="#strategije/nova">Naloži lastno strategijo</a></p>
       <span class="error" data-error="strategy_id"></span>
 
       <fieldset class="instruments">
