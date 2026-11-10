@@ -112,7 +112,9 @@ test('GET /api/backtests in GET /api/backtests/:id vrneta samo teste lastnika, t
 
     const own = await get(base, `/api/backtests/${first}`, ana);
     assert.equal(own.status, 200);
-    assert.equal(((await own.json()) as any).results.trades.length, 1);
+    const detail = (await own.json()) as any;
+    assert.equal(detail.results.tradeCount, 1);
+    assert.equal(detail.results.trades, undefined); // posli so na voljo samo po straneh
 
     for (const path of [`/api/backtests/${tuj}`, '/api/backtests/99999', '/api/backtests/abc']) {
       assert.equal((await get(base, path, ana)).status, 404, path);
@@ -135,5 +137,40 @@ test('testi zahtevajo prijavo vloge trgovec, drugi načini so zavrnjeni', async 
     const del = await fetch(`${base}/api/backtests/1`, { method: 'DELETE', headers: { Cookie: trader } });
     assert.equal(del.status, 405);
     assert.equal(await count(pool, 'backtests'), 0);
+  });
+});
+
+test('GET /api/backtests/:id/trades vrne posle po času vstopa v straneh po 20', async () => {
+  await withData(async (base, pool) => {
+    const ana = await loginCookie(base, await addUser(pool, 'trader', 'ana@example.com'));
+    const bor = await loginCookie(base, await addUser(pool, 'trader', 'bor@example.com'));
+    // 45 poslov, vsak traja pol minute in vstopi vsako minuto
+    const code = `export default () => Array.from({ length: 45 }, (_, i) => ({ side: 'long', entryTime: ${JAN1} + i * 60000, exitTime: ${JAN1} + i * 60000 + 30000, entryPrice: 100, exitPrice: 101 }));`;
+    const id = Number((await pool.query(
+      `INSERT INTO strategies (owner_id, name, source) VALUES ($1, 'Veliko poslov', $2) RETURNING id`,
+      [(await pool.query('SELECT id FROM users WHERE email = $1', ['ana@example.com'])).rows[0].id, code],
+    )).rows[0].id);
+    const test = (await (await post(base, '/api/backtests', ana, await valid(pool, { strategy_id: id }))).json()) as any;
+    assert.equal(test.results?.tradeCount, 45, JSON.stringify(test));
+    // posle v bazi obrnemo, da se vidi, da jih endpoint razvrsti po času vstopa
+    await pool.query(`UPDATE backtests SET results = jsonb_set(results, '{trades}',
+      (SELECT jsonb_agg(t ORDER BY n DESC) FROM jsonb_array_elements(results -> 'trades') WITH ORDINALITY AS x(t, n))) WHERE id = $1`, [test.id]);
+
+    const page = async (q: string) => (await (await get(base, `/api/backtests/${test.id}/trades${q}`, ana)).json()) as any;
+    const first = await page('');
+    assert.deepEqual([first.page, first.pageSize, first.total, first.pages, first.trades.length], [1, 20, 45, 3, 20]);
+    const times = (p: any) => p.trades.map((t: any) => t.entryTime as number);
+    assert.deepEqual(times(first), Array.from({ length: 20 }, (_, i) => JAN1 + i * 60000));
+    assert.deepEqual(times(await page('?page=3')), Array.from({ length: 5 }, (_, i) => JAN1 + (40 + i) * 60000));
+    assert.equal((await page('?page=4')).trades.length, 0); // za zadnjo stranjo prazno
+    assert.ok(['ticker', 'netProfit', 'entryTime'].every((k) => k in first.trades[0]));
+
+    for (const q of ['?page=0', '?page=-1', '?page=abc', '?page=1.5', '?page=']) {
+      assert.equal((await get(base, `/api/backtests/${test.id}/trades${q}`, ana)).status, 400, q);
+    }
+    for (const path of [`/api/backtests/${test.id}/trades`, '/api/backtests/99999/trades', '/api/backtests/abc/trades']) {
+      assert.equal((await get(base, path, bor)).status, 404, path);
+    }
+    assert.equal((await get(base, `/api/backtests/${test.id}/trades`)).status, 401);
   });
 });

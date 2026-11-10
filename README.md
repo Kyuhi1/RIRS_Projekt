@@ -196,7 +196,8 @@ Tabeli `backtests` in `backtest_instruments` (migracija `007_backtests.sql`) hra
 |---|---|
 | `POST /api/backtests` | izračuna test in ga shrani kot `draft`; `201` s polnim testom |
 | `GET /api/backtests` | testi prijavljenega trgovca, najnovejši prvi, s povzetkom rezultatov (`summary`) |
-| `GET /api/backtests/:id` | poln test z `results` (metrike, stroški, dnevna krivulja, posli); tuj ali neobstoječ test vrne `404` |
+| `GET /api/backtests/:id` | poln test z `results` (metrike, stroški, dnevna krivulja, brez poslov); tuj ali neobstoječ test vrne `404` |
+| `GET /api/backtests/:id/trades?page=N` | posli testa po času vstopa, po 20 na stran (`page` privzeto 1); odgovor `{ page, pageSize, total, pages, trades }`, neveljaven `page` vrne `400`, tuj ali neobstoječ test `404` |
 
 Poti so samo za vlogo trgovec (`401` brez prijave, `403` za mentorja in administratorja).
 
@@ -212,7 +213,7 @@ Telo zahtevka `POST /api/backtests` (JSON):
 
 Odgovori ob napaki: `400` z `{ "errors": { "<polje>": "<sporočilo>" } }` pri neveljavnem vhodu (polja `strategy_id`, `instruments`, `venue_id`, `from`, `to`, `params` in `period`; pri obdobju zunaj podatkov sporočilo vsebuje veljaven razpon) in `422` z `{ "error": "<razlog>" }`, če strategija vrže napako, preseže čas ali vrne neveljavne posle. V obeh primerih se test ne shrani, sporočilo pa ne vsebuje notranjih podrobnosti strežnika.
 
-Izračun: strategija teče v delavcu za vsako izbrano sredstvo (skupna omejitev 60 s), nato `simulate` (poglavje »Simulacija«) izračuna rezultat z borzo in razponi iz baze. Začetni kapital testa je 10.000 in se enakomerno razdeli med izbrana sredstva. V `results` so metrike (`netProfit`, `returnPct`, `tradeCount`, `winRatePct`, `maxDrawdownPct`), bruto dobiček in stroški (`grossProfit`, `costs`), dnevna krivulja (`equityCurve`) in posli (`trades`).
+Izračun: strategija teče v delavcu za vsako izbrano sredstvo (skupna omejitev 60 s), nato `simulate` (poglavje »Simulacija«) izračuna rezultat z borzo in razponi iz baze. Začetni kapital testa je 10.000 in se enakomerno razdeli med izbrana sredstva. V `results` so metrike (`netProfit`, `returnPct`, `tradeCount`, `winRatePct`, `maxDrawdownPct`), bruto dobiček in stroški (`grossProfit`, `costs`), dnevna krivulja (`equityCurve`) in posli (`trades`). Posli so shranjeni v `results`, vendar jih `GET /api/backtests/:id` ne vrne; berejo se po straneh preko `/trades`.
 
 Omejitev obsega: backend pred nalaganjem prešteje svečke v izbranem obdobju in zavrne test, če jih je za katerokoli sredstvo več kot `MAX_BARS` (400.000, pri minutnih podatkih okoli 9 mesecev). Odgovor je `400` z `errors.period` (»Obdobje za <TICKER> vsebuje N svečk, dovoljenih je največ 400.000. Izberite krajše obdobje.«). Brez omejitve bi backend pri milijonih svečk zmanjkalo pomnilnika.
 
