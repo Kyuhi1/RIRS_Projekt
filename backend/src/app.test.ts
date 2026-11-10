@@ -3,11 +3,12 @@ import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import { test } from 'node:test';
 import { createApp } from './app.ts';
+import { createCandleStore } from './candles.ts';
 import { createPool } from './db.ts';
 
 test('GET /api/health vrne 200 in status ok', async () => {
   const pool = createPool('postgres://localhost/unused'); // health ne uporablja baze, povezava se ne odpre
-  const server = createApp(pool).listen(0);
+  const server = createApp(pool, createCandleStore('/ni-podatkov')).listen(0);
   await once(server, 'listening');
   try {
     const { port } = server.address() as AddressInfo;
