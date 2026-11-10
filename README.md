@@ -25,3 +25,14 @@ Aplikacija je sestavljena iz treh ločenih storitev (frontend, backend, baza), k
 - **Podatki:** PostgreSQL 16, Parquet in DuckDB
 - **Skripte:** Python
 - **Okolje:** Docker in Docker Compose virtualno okolje
+
+## Lokalni zagon
+
+Potrebuješ Docker z Docker Compose.
+
+1. Ustvari datoteko z nastavitvami: `cp .env.example .env` in v njej nastavi geslo baze (`POSTGRES_PASSWORD`). Datoteka `.env` je v `.gitignore`.
+2. Zaženi vse tri storitve: `docker compose up --build`
+3. Odpri aplikacijo na `http://localhost:8080`.
+4. Preveri backend: `curl http://localhost:8080/api/health` vrne `{"status":"ok"}`.
+
+Ustavitev: `docker compose down` (podatki baze ostanejo v volumnu `pgdata`, `docker compose down -v` jih izbriše).
