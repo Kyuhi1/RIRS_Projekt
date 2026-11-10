@@ -1,0 +1,1 @@
+-- Začetna migracija. Tabele dodajajo posamezne zgodbe v svojih migracijah (002_..., 003_...).
