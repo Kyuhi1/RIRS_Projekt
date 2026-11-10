@@ -4,7 +4,7 @@ import { login, logout, register, type Result, type User } from './auth.ts';
 import { createBacktest, getBacktest, getTrades, listBacktests } from './backtestsApi.ts';
 import type { CandleStore } from './candles.ts';
 import { COOKIE_NAME, readCookie, verifyToken } from './session.ts';
-import { getStrategy, listStrategies } from './strategies.ts';
+import { createStrategy, getStrategy, listStrategies } from './strategies.ts';
 
 interface Deps {
   pool: Pool;
@@ -21,16 +21,23 @@ interface Route {
 }
 
 class BadRequest extends Error {}
+class BodyTooLarge extends BadRequest {}
 
-// Prebere telo zahtevka kot JSON (največ 10 KB).
-async function readJson(req: IncomingMessage): Promise<unknown> {
+// Strategije so lahko velike do 100 KB; telo ima rezervo za ubežne znake v JSON.
+const STRATEGY_BODY_MAX = 512_000;
+
+// Prebere telo zahtevka kot JSON (privzeto največ 10 KB). Preveliko telo se do 10 MB prebere in zavrže,
+// da odjemalec dobi odgovor in ne prekinjene povezave; večje povezavo prekine.
+const DRAIN_MAX = 10_000_000;
+async function readJson(req: IncomingMessage, maxBytes = 10_000): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > 10_000) throw new BadRequest();
-    chunks.push(chunk);
+    if (size > DRAIN_MAX) throw new BodyTooLarge();
+    if (size <= maxBytes) chunks.push(chunk);
   }
+  if (size > maxBytes) throw new BodyTooLarge();
   try {
     return JSON.parse(Buffer.concat(chunks).toString('utf8'));
   } catch {
@@ -85,7 +92,17 @@ const routes: Record<string, Record<string, Route>> = {
   '/api/auth/login': { POST: open(async ({ pool, jwtSecret }, req) => login(pool, jwtSecret, await readJson(req))) },
   '/api/auth/logout': { POST: open(async () => logout()) },
   '/api/auth/me': { GET: guarded(ANY_ROLE, async ({ user }) => ok(user)) },
-  '/api/strategies': { GET: guarded(ANY_ROLE, async ({ pool, user }) => listStrategies(pool, user!)) },
+  '/api/strategies': {
+    GET: guarded(ANY_ROLE, async ({ pool, user }) => listStrategies(pool, user!)),
+    POST: guarded(['trader'], async ({ pool, user }, req) => {
+      try {
+        return await createStrategy(pool, user!, await readJson(req, STRATEGY_BODY_MAX));
+      } catch (err) {
+        if (err instanceof BodyTooLarge) return { status: 400, body: { errors: { source: 'Datoteka je prevelika, dovoljenih je največ 100 KB' } } };
+        throw err;
+      }
+    }),
+  },
   '/api/strategies/:id': { GET: guarded(ANY_ROLE, async ({ pool, user, params }) => getStrategy(pool, user!, params.id!)) },
   '/api/backtests': {
     GET: guarded(['trader'], async ({ pool, user }) => listBacktests(pool, user!)),

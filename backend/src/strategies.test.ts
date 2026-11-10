@@ -95,15 +95,15 @@ test('tuja zasebna strategija in neobstoječa vrneta 404, tuja deljena je dostop
   });
 });
 
-test('strategije zahtevajo prijavo, spreminjanje ni dovoljeno', async () => {
+test('strategije zahtevajo prijavo, nepodprte metode so zavrnjene', async () => {
   await withApp(async (base, pool) => {
     const { anaCookie } = await setup(base, pool);
     assert.equal((await get(base, '/api/strategies')).status, 401);
     assert.equal((await get(base, '/api/strategies/1')).status, 401);
-    const post = await fetch(`${base}/api/strategies`, { method: 'POST', headers: { Cookie: anaCookie } });
-    assert.equal(post.status, 405);
-    assert.equal(post.headers.get('allow'), 'GET');
-    assert.equal((await fetch(`${base}/api/strategies/1`, { method: 'DELETE', headers: { Cookie: anaCookie } })).status, 405);
+    const put = await fetch(`${base}/api/strategies`, { method: 'PUT', headers: { Cookie: anaCookie } });
+    assert.equal(put.status, 405);
+    assert.equal(put.headers.get('allow'), 'GET, POST');
+    assert.equal((await fetch(`${base}/api/strategies/1`, { method: 'PUT', headers: { Cookie: anaCookie } })).status, 405);
   });
 });
 
