@@ -16,7 +16,7 @@ const app = document.querySelector<HTMLDivElement>('#app')!;
 let user: User | null = null;
 let notice = ''; // sporočilo na strani za prijavo (po registraciji, po odjavi, ob poteku seje)
 
-const currentHash = () => location.hash.slice(1);
+const currentHash = () => location.hash.slice(1); // npr. »backtests« ali »backtests/12«
 
 // Preusmeri na stran; če je hash že enak, ponovno izriše.
 function go(page: string): void {
@@ -68,7 +68,7 @@ function renderLoggedOut(page: string): void {
   app.querySelector(`#${page}`)?.scrollIntoView();
 }
 
-function renderLoggedIn(current: User, page: string): void {
+function renderLoggedIn(current: User, page: string, arg?: string): void {
   app.innerHTML = `${renderHeader(current, page)}<main class="page"></main>`;
   app.querySelector<HTMLElement>('#user-name')!.textContent = `${current.name} (${ROLE_LABELS[current.role]})`;
   app.querySelector('#logout')!.addEventListener('click', async () => {
@@ -77,18 +77,18 @@ function renderLoggedIn(current: User, page: string): void {
     notice = 'Odjavljeni ste.';
     go('prijava');
   });
-  renderPage(app.querySelector<HTMLElement>('main')!, page, expireSession);
+  renderPage(app.querySelector<HTMLElement>('main')!, page, expireSession, arg);
 }
 
 // Zaščita strani v brskalniku je samo udobje; dostop dejansko preverja backend (ADR 0005).
 function render(): void {
-  const page = currentHash();
+  const [page = '', arg] = currentHash().split('/');
   if (!user) {
     if (!PUBLIC_PAGES.includes(page)) return go('prijava');
     return renderLoggedOut(page);
   }
   if (!NAV[user.role].includes(page)) return go(NAV[user.role][0]!);
-  renderLoggedIn(user, page);
+  renderLoggedIn(user, page, arg);
 }
 
 window.addEventListener('hashchange', render);

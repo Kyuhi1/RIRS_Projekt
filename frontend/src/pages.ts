@@ -1,4 +1,5 @@
 import { errorMessage, getJson } from './api';
+import { renderBacktests } from './backtests';
 
 // Strani za posamezne vloge. Vsebina razen administracije sledi v naslednjih nalogah.
 export const PAGE_TITLES: Record<string, string> = {
@@ -82,7 +83,8 @@ function showError(container: HTMLElement): void {
   container.insertAdjacentHTML('beforeend', '<p class="error">Strežnik ni dosegljiv, poskusite znova.</p>');
 }
 
-export function renderPage(container: HTMLElement, page: string, onUnauthorized: () => void): void {
+export function renderPage(container: HTMLElement, page: string, onUnauthorized: () => void, arg?: string): void {
+  if (page === 'backtests') return void renderBacktests(container, arg, onUnauthorized).catch(() => showError(container));
   container.innerHTML = '<h2></h2>';
   container.querySelector('h2')!.textContent = PAGE_TITLES[page] ?? page;
   if (page === 'administracija') void renderAdmin(container, onUnauthorized).catch(() => showError(container));
