@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@duckdb/node-api": "2.0.0-r.1",
+    "bcryptjs": "3.0.3",
     "pg": "^8.23.1"
   }
 }
