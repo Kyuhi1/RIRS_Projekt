@@ -65,3 +65,53 @@ test('prekoračitev pomnilnika prekine samo delavca, backend teče naprej', asyn
   await rejectsWith(hog, /pomnilniško omejitev \(32 MB\)/, {}, { memoryMb: 32, timeoutMs: 20_000 });
   assert.deepEqual(await runStrategy(GOOD, BARS, {}), []);
 });
+
+// Izolacija: strategija ne sme doseči process, require, fetch, datotek ali baze.
+test('strategija nima dostopa do process, require, fetch, časovnikov in modulov', async () => {
+  const names = ['process', 'require', 'fetch', 'setTimeout', 'setImmediate', 'Buffer', 'module', 'exports', '__dirname', 'global'];
+  const source = `export default () => [{ types: [${names.map((n) => `typeof ${n}`).join(', ')}] }]`;
+  const [result] = (await runStrategy(source, BARS, {})) as unknown as { types: string[] }[];
+  assert.deepEqual(result!.types, names.map(() => 'undefined'));
+
+  await rejectsWith("export default () => { require('fs').readFileSync('/etc/passwd'); return []; }", /require is not defined/);
+  await rejectsWith('export default () => { process.env.DATABASE_URL; return []; }', /process is not defined/);
+  await rejectsWith("export default () => { fetch('http://example.com'); return []; }", /fetch is not defined/);
+});
+
+test('statični import modulov v strategiji ni mogoč', async () => {
+  await rejectsWith("import fs from 'node:fs'; export default () => [];", /Napaka v kodi strategije/);
+});
+
+test('poskusi pobega prek konstruktorjev in podanih podatkov ne uspejo', async () => {
+  const escapes = [
+    "this.constructor.constructor('return process')()",
+    "[].constructor.constructor('return process')()",
+    "(() => {}).constructor('return process')()",
+    "bars.constructor.constructor('return process')()",
+    "params.constructor.constructor('return process')()",
+    "Object.getPrototypeOf(bars).constructor.constructor('return process')()",
+    "eval('process')",
+    "new Function('return process')()",
+  ];
+  for (const escape of escapes) {
+    await assert.rejects(
+      runStrategy(`export default (bars, params) => { const p = ${escape}; return [p.version]; }`, BARS, { a: 1 }),
+      (err) => err instanceof StrategyError,
+      escape,
+    );
+  }
+});
+
+test('strategija ne more spremeniti podatkov delavca ali vplivati na naslednji zagon', async () => {
+  await runStrategy('export default (bars) => { bars.length = 0; Object.prototype.hacked = 1; Array.prototype.push = null; return []; }', BARS, {});
+  assert.equal((Object.prototype as Record<string, unknown>).hacked, undefined);
+  assert.equal(BARS.length, 3);
+  assert.deepEqual(await runStrategy('export default (bars) => [{ n: bars.length, h: typeof ({}).hacked }]', BARS, {}) as unknown[], [{ n: 3, h: 'undefined' }]);
+});
+
+test('delavec ne uvaža modulov backenda in zato nima povezave z bazo ali datotekami', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('./strategyWorker.ts', import.meta.url), 'utf8');
+  const imports = [...source.matchAll(/^import .* from '(.+)';$/gm)].map((m) => m[1]);
+  assert.deepEqual(imports.sort(), ['node:vm', 'node:worker_threads']);
+});
