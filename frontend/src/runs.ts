@@ -9,6 +9,8 @@ interface Run {
   from: string;
   to: string;
   visibility: 'private' | 'shared';
+  prop_plan: { firm_name: string; plan_name: string } | null;
+  challenge_passed: boolean | null;
   summary: { netProfit: number; returnPct: number };
 }
 
@@ -60,7 +62,8 @@ export async function renderRuns(container: HTMLElement, ref: Reference, onUnaut
       link.textContent = `#${run.id} ${run.strategy_name}`;
       const details = document.createElement('div');
       details.className = 'hint';
-      details.textContent = `${run.instruments.join(', ')} · ${run.venue_id}`;
+      const plan = run.prop_plan ? ` · ${run.prop_plan.firm_name} ${run.prop_plan.plan_name}: ${run.challenge_passed ? 'izziv opravljen' : 'izziv ni opravljen'}` : '';
+      details.textContent = `${run.instruments.join(', ')} · ${run.venue_id}${plan}`;
       name.append(link, details);
 
       const period = document.createElement('td');

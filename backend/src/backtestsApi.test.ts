@@ -174,3 +174,48 @@ test('GET /api/backtests/:id/trades vrne posle po času vstopa v straneh po 20',
     assert.equal((await get(base, `/api/backtests/${test.id}/trades`)).status, 401);
   });
 });
+
+test('načrt financiranega računa se shrani s testom in vrne v odgovoru; brez načrta je izid prazen', async () => {
+  await withData(async (base, pool) => {
+    const cookie = await loginCookie(base, await addUser(pool, 'trader'));
+    const plain = (await (await post(base, '/api/backtests', cookie, await valid(pool))).json()) as any;
+    assert.deepEqual([plain.prop_plan, plain.challenge_passed, plain.results.challenge], [null, null, undefined]);
+
+    const res = await post(base, '/api/backtests', cookie, await valid(pool, { prop_plan_id: 'ftmo-2step-100k' }));
+    assert.equal(res.status, 201);
+    const body = (await res.json()) as any;
+    assert.deepEqual(body.prop_plan, { id: 'ftmo-2step-100k', firm_name: 'FTMO', plan_name: '2-Step 100k', account_size: 100000, profit_target: 10000, max_daily_loss: 5000, max_total_loss: 10000 });
+    assert.equal(body.results.initialCapital, 100000);
+    assert.equal(typeof body.challenge_passed, 'boolean');
+    assert.equal(body.challenge_passed, body.results.challenge.passed);
+    assert.deepEqual(Object.keys(body.results.challenge).sort(), ['maxDailyLoss', 'maxTotalLoss', 'passed', 'profitTarget']);
+
+    const row = (await pool.query('SELECT prop_plan_id, challenge_passed FROM backtests WHERE id = $1', [body.id])).rows[0];
+    assert.deepEqual([row.prop_plan_id, row.challenge_passed], ['ftmo-2step-100k', body.challenge_passed]);
+
+    const list = (await (await get(base, '/api/backtests', cookie)).json()) as any[];
+    assert.deepEqual(list.map((t) => [t.prop_plan?.id ?? null, t.challenge_passed]), [['ftmo-2step-100k', body.challenge_passed], [null, null]]);
+
+    const before = await count(pool, 'backtests');
+    const bad = await post(base, '/api/backtests', cookie, await valid(pool, { prop_plan_id: 'ne-obstaja' }));
+    assert.equal(bad.status, 400);
+    assert.ok(((await bad.json()) as any).errors.prop_plan_id);
+    assert.equal(await count(pool, 'backtests'), before);
+  });
+});
+
+test('baza zahteva izid preverjanja natanko takrat, ko je načrt izbran', async () => {
+  await withData(async (_base, pool) => {
+    const user = await addUser(pool, 'trader');
+    const insert = (plan: string | null, passed: boolean | null) =>
+      pool.query(
+        `INSERT INTO backtests (owner_id, strategy_id, venue_id, period_from, period_to, results, prop_plan_id, challenge_passed)
+         SELECT u.id, s.id, 'gross', '2024-01-01', '2024-01-03', '{}', $1, $2 FROM users u, strategies s WHERE u.email = $3 AND s.name = 'Buy & Hold'`,
+        [plan, passed, user],
+      );
+    await assert.rejects(insert(null, true), /backtests_challenge_needs_plan/);
+    await assert.rejects(insert('ftmo-2step-100k', null), /backtests_challenge_needs_plan/);
+    await insert(null, null);
+    await insert('ftmo-2step-100k', false);
+  });
+});

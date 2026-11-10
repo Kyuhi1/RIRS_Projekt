@@ -7,8 +7,11 @@ const SELECT = `
   SELECT b.id, b.strategy_id, s.name AS strategy_name, b.venue_id,
          ARRAY(SELECT ticker FROM backtest_instruments WHERE backtest_id = b.id ORDER BY ticker) AS instruments,
          to_char(b.period_from, 'YYYY-MM-DD') AS "from", to_char(b.period_to, 'YYYY-MM-DD') AS "to",
-         b.params, b.status, b.visibility, b.created_at`;
-const FROM = 'FROM backtests b JOIN strategies s ON s.id = b.strategy_id';
+         b.params, b.status, b.visibility, b.created_at, b.challenge_passed,
+         CASE WHEN pp.id IS NULL THEN NULL ELSE jsonb_build_object('id', pp.id, 'firm_name', pp.firm_name, 'plan_name', pp.plan_name,
+           'account_size', pp.account_size, 'profit_target', pp.profit_target,
+           'max_daily_loss', pp.max_daily_loss, 'max_total_loss', pp.max_total_loss) END AS prop_plan`;
+const FROM = 'FROM backtests b JOIN strategies s ON s.id = b.strategy_id LEFT JOIN prop_plans pp ON pp.id = b.prop_plan_id';
 
 const withId = <T extends { id: string; strategy_id: string }>({ id, strategy_id, ...rest }: T) => ({
   id: Number(id),
@@ -24,9 +27,9 @@ export async function createBacktest(pool: Pool, store: CandleStore, user: User,
     try {
       await client.query('BEGIN');
       const { rows } = await client.query(
-        `INSERT INTO backtests (owner_id, strategy_id, venue_id, period_from, period_to, params, results)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-        [user.id, test.strategyId, test.venueId, test.from, test.to, test.params, test.results],
+        `INSERT INTO backtests (owner_id, strategy_id, venue_id, period_from, period_to, params, results, prop_plan_id, challenge_passed)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+        [user.id, test.strategyId, test.venueId, test.from, test.to, test.params, test.results, test.propPlanId, test.challengePassed],
       );
       const id = rows[0].id as string;
       await client.query('INSERT INTO backtest_instruments (backtest_id, ticker) SELECT $1, unnest($2::text[])', [id, test.instruments]);

@@ -206,3 +206,102 @@ test('obdobje z preveč svečkami je zavrnjeno, še preden se svečke naložijo,
     assert.equal((await ctx.run(await request(ctx, { from: '2024-01-02' }), undefined, 2880)).results.tradeCount, 1);
   });
 });
+
+// Strategija z znanimi cenami: dan 1 +10 %, dan 2 -6 %, dan 3 +8 % kapitala (pri kapitalu K je količina K / 100).
+// Za račun 100.000: konec dneva 110.000, 104.000, 112.000 (dnevna izguba 6.000 drugi dan).
+const CONTROLLED = `export default (bars) => [
+  { side: 'long', entryTime: bars[0].time, exitTime: bars[10].time, entryPrice: 100, exitPrice: 110 },
+  { side: 'long', entryTime: bars[1440].time, exitTime: bars[1450].time, entryPrice: 100, exitPrice: 94 },
+  { side: 'long', entryTime: bars[2880].time, exitTime: bars[2890].time, entryPrice: 100, exitPrice: 108 },
+];`;
+
+async function withPlans(ctx: Ctx, fn: (strategyId: number) => Promise<void>) {
+  await ctx.pool.query(`INSERT INTO prop_plans (id, firm_name, plan_name, account_size, max_daily_loss, max_total_loss, profit_target) VALUES
+    ('t-loose', 'Test', 'Loose', 100000, 7000, 20000, 10000),
+    ('t-strict', 'Test', 'Strict', 100000, 5000, 20000, 10000),
+    ('t-hard', 'Test', 'Hard', 100000, 7000, 20000, 50000),
+    ('t-tight', 'Test', 'Tight', 100000, 7000, 3000, 10000),
+    ('t-small', 'Test', 'Small', 50000, 3500, 10000, 5000)`);
+  const id = Number((await ctx.pool.query("INSERT INTO strategies (owner_id, name, source) VALUES ($1, 'Nadzorovana', $2) RETURNING id", [ctx.user.id, CONTROLLED])).rows[0].id);
+  await fn(id);
+}
+
+test('brez načrta financiranega računa ni razdelka challenge, izid je prazen in kapital je 10.000', async () => {
+  await withCtx(async (ctx) => {
+    for (const extra of [{}, { prop_plan_id: null }, { prop_plan_id: '' }]) {
+      const r = await ctx.run(await request(ctx, extra));
+      assert.deepEqual([r.propPlanId, r.challengePassed, r.results.challenge, r.results.initialCapital], [null, null, undefined, INITIAL_CAPITAL]);
+    }
+  });
+});
+
+test('z načrtom test teče s kapitalom računa in vrne rezultate po pravilih', async () => {
+  await withCtx(async (ctx) => {
+    await withPlans(ctx, async (strategy_id) => {
+      const r = await ctx.run(await request(ctx, { strategy_id, prop_plan_id: 't-loose' }));
+      assert.equal(r.results.initialCapital, 100_000);
+      assert.deepEqual(r.results.equityCurve.map((p) => p.value), [110_000, 104_000, 112_000]);
+      assert.equal(r.propPlanId, 't-loose');
+      assert.equal(r.challengePassed, true);
+      const c = r.results.challenge!;
+      assert.equal(c.passed, true);
+      assert.deepEqual(c.profitTarget, { achieved: 12_000, allowed: 10_000, passed: true, firstViolation: null });
+      assert.deepEqual(c.maxDailyLoss, { achieved: 6_000, allowed: 7_000, passed: true, firstViolation: null });
+      assert.deepEqual(c.maxTotalLoss, { achieved: 0, allowed: 20_000, passed: true, firstViolation: null });
+    });
+  });
+});
+
+test('ista strategija z različnimi načrti da različne izide: dnevna izguba, cilj in skupna izguba', async () => {
+  await withCtx(async (ctx) => {
+    await withPlans(ctx, async (strategy_id) => {
+      const run = async (plan: string) => (await ctx.run(await request(ctx, { strategy_id, prop_plan_id: plan }))).results.challenge!;
+
+      const strict = await run('t-strict'); // dnevna izguba 6.000 > 5.000 drugi dan, test teče do konca (dobiček 12.000)
+      assert.deepEqual(strict.maxDailyLoss, { achieved: 6_000, allowed: 5_000, passed: false, firstViolation: '2024-01-02' });
+      assert.deepEqual([strict.profitTarget.passed, strict.maxTotalLoss.passed, strict.passed], [true, true, false]);
+
+      const hard = await run('t-hard'); // cilj 50.000 ni dosežen
+      assert.deepEqual([hard.profitTarget.achieved, hard.profitTarget.passed, hard.maxDailyLoss.passed, hard.passed], [12_000, false, true, false]);
+
+      const tight = await run('t-tight'); // skupna izguba 3.000: dan 1 je +10.000, zato skupne izgube ni
+      assert.equal(tight.maxTotalLoss.passed, true);
+      assert.equal(tight.passed, true);
+
+      const small = await ctx.run(await request(ctx, { strategy_id, prop_plan_id: 't-small' })); // račun 50.000: vse polovično
+      assert.equal(small.results.initialCapital, 50_000);
+      assert.deepEqual(small.results.equityCurve.map((p) => p.value), [55_000, 52_000, 56_000]);
+      assert.deepEqual([small.results.challenge!.maxDailyLoss.achieved, small.results.challenge!.maxDailyLoss.passed, small.challengePassed], [3_000, true, true]);
+    });
+  });
+});
+
+test('kršitev skupne izgube: prvi datum, test se izvede do konca obdobja', async () => {
+  await withCtx(async (ctx) => {
+    // izgubi 8 % prvi dan in 8 % tretji dan; načrt dovoli skupno izgubo 10.000 in dnevno 9.000
+    const losing = Number((await ctx.pool.query(
+      `INSERT INTO strategies (owner_id, name, source) VALUES ($1, 'Izgube', $2) RETURNING id`,
+      [ctx.user.id, `export default (bars) => [
+        { side: 'long', entryTime: bars[0].time, exitTime: bars[10].time, entryPrice: 100, exitPrice: 92 },
+        { side: 'long', entryTime: bars[2880].time, exitTime: bars[2890].time, entryPrice: 100, exitPrice: 92 },
+      ]`],
+    )).rows[0].id);
+    await ctx.pool.query("INSERT INTO prop_plans (id, firm_name, plan_name, account_size, max_daily_loss, max_total_loss, profit_target) VALUES ('t-loss', 'Test', 'Loss', 100000, 9000, 10000, 1000)");
+    const r = await ctx.run(await request(ctx, { strategy_id: losing, prop_plan_id: 't-loss' }));
+    assert.deepEqual(r.results.equityCurve.map((p) => p.value), [92_000, 92_000, 84_000]); // izgub ni mogoče zaustaviti: krivulja je celotna
+    const c = r.results.challenge!;
+    assert.deepEqual(c.maxTotalLoss, { achieved: 16_000, allowed: 10_000, passed: false, firstViolation: '2024-01-03' });
+    assert.deepEqual(c.maxDailyLoss, { achieved: 8_000, allowed: 9_000, passed: true, firstViolation: null });
+    assert.deepEqual([c.profitTarget.passed, c.passed, r.challengePassed], [false, false, false]);
+    assert.equal(r.results.tradeCount, 2);
+  });
+});
+
+test('neznan ali neveljaven načrt financiranega računa je zavrnjen z napako ob polju', async () => {
+  await withCtx(async (ctx) => {
+    await rejection(ctx.run(await request(ctx, { prop_plan_id: 'ne-obstaja' })), 400, (b) => assert.equal(b.errors.prop_plan_id, 'Izbrani načrt financiranega računa ne obstaja'));
+    for (const bad of [5, true, ['ftmo-2step-100k'], {}, 'x'.repeat(101)]) {
+      await rejection(ctx.run(await request(ctx, { prop_plan_id: bad })), 400, (b) => assert.equal(b.errors.prop_plan_id, 'Neveljaven načrt financiranega računa'));
+    }
+  });
+});

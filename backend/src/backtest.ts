@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import type { User } from './auth.ts';
 import type { CandleStore } from './candles.ts';
+import { checkChallenge, type ChallengeResult } from './propRules.ts';
 import { simulate, SimulationError, type SimulationResult, type SpreadLookup } from './simulation.ts';
 import { runStrategy, StrategyError } from './strategy.ts';
 
@@ -32,10 +33,18 @@ export interface ComputedBacktest {
   from: string; // YYYY-MM-DD
   to: string;
   params: Record<string, unknown>; // privzeti parametri strategije z vrednostmi, spremenjenimi za ta test
-  results: SimulationResult;
+  propPlanId: string | null; // neobvezen načrt financiranega računa
+  challengePassed: boolean | null; // izid preverjanja pravil; null brez načrta
+  results: SimulationResult & { challenge?: ChallengeResult }; // `challenge` samo, če je načrt izbran
 }
 
 type Errors = Record<string, string>;
+interface PropPlanRow {
+  account_size: number;
+  profit_target: number;
+  max_daily_loss: number;
+  max_total_loss: number;
+}
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const toMs = (date: string) => Date.parse(`${date}T00:00:00Z`);
 const dayString = (iso: string) => iso.slice(0, 10);
@@ -68,6 +77,11 @@ function parse(input: unknown) {
 
   if (body.params !== undefined && !isObject(body.params)) errors.params = 'Parametri morajo biti objekt JSON';
 
+  // Načrt financiranega računa je neobvezen; prazna vrednost pomeni brez načrta.
+  const rawPlan = body.prop_plan_id;
+  const noPlan = rawPlan === undefined || rawPlan === null || rawPlan === '';
+  if (!noPlan && (typeof rawPlan !== 'string' || rawPlan.length > 100)) errors.prop_plan_id = 'Neveljaven načrt financiranega računa';
+
   return {
     errors,
     strategyId,
@@ -76,6 +90,7 @@ function parse(input: unknown) {
     from: body.from as string,
     to: body.to as string,
     params: isObject(body.params) ? body.params : {},
+    propPlanId: noPlan || typeof rawPlan !== 'string' ? null : rawPlan,
   };
 }
 
@@ -106,6 +121,13 @@ export async function computeBacktest(
 
   const venue = (await pool.query('SELECT maker_pct, taker_pct, pay_spread FROM venues WHERE id = $1', [request.venueId])).rows[0];
   if (!venue) throw fail({ venue_id: 'Izbrana borza ne obstaja' });
+
+  // Z načrtom test teče s kapitalom financiranega računa (`account_size`), sicer z začetnim kapitalom testa.
+  let plan: PropPlanRow | undefined;
+  if (request.propPlanId !== null) {
+    plan = (await pool.query('SELECT account_size, profit_target, max_daily_loss, max_total_loss FROM prop_plans WHERE id = $1', [request.propPlanId])).rows[0];
+    if (!plan) throw fail({ prop_plan_id: 'Izbrani načrt financiranega računa ne obstaja' });
+  }
 
   const known = (await pool.query('SELECT ticker FROM instruments WHERE ticker = ANY($1)', [request.instruments])).rows.map((r) => r.ticker);
   const unknown = request.instruments.filter((t) => !known.includes(t));
@@ -155,14 +177,30 @@ export async function computeBacktest(
     const spreadFor: SpreadLookup = (ticker, year) => spreads.get(`${ticker}:${year}`);
 
     const results = simulate({
-      initialCapital: INITIAL_CAPITAL,
+      initialCapital: plan ? plan.account_size : INITIAL_CAPITAL,
       from: fromMs,
       to: endMs - 1,
       assets,
       venue: { makerPct: venue.maker_pct, takerPct: venue.taker_pct, paySpread: venue.pay_spread },
       spreadFor,
     });
-    return { strategyId: Number(strategy.id), venueId: request.venueId, instruments: request.instruments, from: request.from, to: request.to, params, results };
+    const challenge = plan
+      ? checkChallenge(
+          { accountSize: plan.account_size, profitTarget: plan.profit_target, maxDailyLoss: plan.max_daily_loss, maxTotalLoss: plan.max_total_loss },
+          results.equityCurve,
+        )
+      : undefined;
+    return {
+      strategyId: Number(strategy.id),
+      venueId: request.venueId,
+      instruments: request.instruments,
+      from: request.from,
+      to: request.to,
+      params,
+      propPlanId: plan ? request.propPlanId : null,
+      challengePassed: challenge ? challenge.passed : null,
+      results: challenge ? { ...results, challenge } : results,
+    };
   } catch (err) {
     if (err instanceof StrategyError) throw new BacktestError(422, { error: err.message });
     if (err instanceof SimulationError) throw new BacktestError(422, { error: `Strategija je vrnila neveljavne posle: ${err.message}` });

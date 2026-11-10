@@ -31,6 +31,9 @@ export function yearsBack(range: { from: string; to: string }, years: number): s
   return from > range.from ? from : range.from;
 }
 
+// »de-DE« ima enaka ločila kot slovenščina, a pika tudi pri štirimestnih številih (sl-SI jo izpusti: 5000).
+const amount = (value: number) => value.toLocaleString('de-DE');
+
 const options = (items: { value: string; label: string }[], placeholder: string) =>
   `<option value="">${placeholder}</option>` + items.map((i) => `<option value="${i.value}"></option>`).join('');
 
@@ -99,8 +102,9 @@ export function renderNewTest(container: HTMLElement, ref: Reference, onCreated:
       <span class="error" data-error="venue_id"></span>
 
       <label for="prop-plan">Financiran račun (neobvezno)</label>
-      <select id="prop-plan" name="prop_plan_id" disabled></select>
-      <p class="hint">Preverjanje pravil financiranega računa bo na voljo v naslednjem koraku razvoja.</p>
+      <select id="prop-plan" name="prop_plan_id"></select>
+      <p class="hint" id="plan-info">Brez izbire se pravila ne preverjajo in test teče s kapitalom 10.000.</p>
+      <span class="error" data-error="prop_plan_id"></span>
 
       <fieldset class="params">
         <legend>Nastavitve strategije</legend>
@@ -164,6 +168,15 @@ export function renderNewTest(container: HTMLElement, ref: Reference, onCreated:
       $<HTMLInputElement>('#to').value = range.to;
     }),
   );
+
+  // Izbira načrta pokaže njegova pravila; test teče s kapitalom računa.
+  const plan = $<HTMLSelectElement>('#prop-plan');
+  plan.addEventListener('change', () => {
+    const p = ref.propPlans.find((x) => x.id === plan.value);
+    $('#plan-info').textContent = p
+      ? `Račun ${amount(p.account_size)}, cilj dobička ${amount(p.profit_target)}, največja dnevna izguba ${amount(p.max_daily_loss)}, največja skupna izguba ${amount(p.max_total_loss)}. Test teče s kapitalom računa.`
+      : 'Brez izbire se pravila ne preverjajo in test teče s kapitalom 10.000.';
+  });
 
   venue.addEventListener('change', () => {
     const v = ref.venues.find((x) => x.id === venue.value);
@@ -234,6 +247,7 @@ export function renderNewTest(container: HTMLElement, ref: Reference, onCreated:
         from: $<HTMLInputElement>('#from').value,
         to: $<HTMLInputElement>('#to').value,
         params: collected.params,
+        prop_plan_id: plan.value || undefined,
       });
       if (status === 201) onCreated((data as { id: number }).id);
       else if (status === 400 && data && typeof data === 'object' && 'errors' in data) showErrors(data.errors as Record<string, string>);
