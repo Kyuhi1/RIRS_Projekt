@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { createApp } from './app.ts';
+import { addUser, loginCookie, TEST_SECRET } from './testApp.ts';
 import { createCandleStore } from './candles.ts';
 import { migrate } from './migrate.ts';
 import { writeTestParquet } from './testData.ts';
@@ -66,12 +67,15 @@ test('GET /api/instruments vrne razpon podatkov; brez podatkov aplikacija deluje
   const migrations = fileURLToPath(new URL('../db/migrations', import.meta.url));
   await withTestDb(async (pool) => {
     await migrate(pool, migrations);
+    await addUser(pool, 'trader');
     await withDataDir(async (dir) => {
       for (const [dataDir, expected] of [[dir, 2880], ['/mapa-ne-obstaja', 0]] as const) {
-        const server = createApp(pool, createCandleStore(dataDir)).listen(0);
+        const server = createApp(pool, createCandleStore(dataDir), TEST_SECRET).listen(0);
         await once(server, 'listening');
         try {
-          const res = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/instruments`);
+          const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+          const cookie = await loginCookie(base, 'trader@example.com');
+          const res = await fetch(`${base}/api/instruments`, { headers: { Cookie: cookie } });
           assert.equal(res.status, 200);
           const list = (await res.json()) as { ticker: string; candles: number; data_from: string | null; data_to: string | null }[];
           assert.equal(list.length, 27);
