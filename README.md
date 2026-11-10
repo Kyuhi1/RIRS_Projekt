@@ -214,6 +214,17 @@ Odgovori ob napaki: `400` z `{ "errors": { "<polje>": "<sporočilo>" } }` pri ne
 
 Izračun: strategija teče v delavcu za vsako izbrano sredstvo (skupna omejitev 60 s), nato `simulate` (poglavje »Simulacija«) izračuna rezultat z borzo in razponi iz baze. Začetni kapital testa je 10.000 in se enakomerno razdeli med izbrana sredstva. V `results` so metrike (`netProfit`, `returnPct`, `tradeCount`, `winRatePct`, `maxDrawdownPct`), bruto dobiček in stroški (`grossProfit`, `costs`), dnevna krivulja (`equityCurve`) in posli (`trades`).
 
+### Stran Backtests (frontend)
+
+Stran **Backtests** (trgovec, wireframe WF-02) ima levo obrazec »Nov test«, desno pa »Seznam zagonov«.
+
+- **Obrazec:** strategija, eno ali več sredstev (sredstva brez zgodovinskih podatkov so onemogočena), obdobje Od/Do, borza (prikaže provizije in razpon), financiran račun in nastavitve strategije. Polje za financiran račun je zaenkrat onemogočeno, ker preverjanje pravil še ni uvedeno.
+- **Obdobje:** poleg ročnega vnosa datumov so prednastavitve »Celotna zgodovina«, »Zadnje leto«, »Zadnja 3 leta« in »Zadnjih 5 let«. Računajo se iz skupnega razpona podatkov izbranih sredstev, začetek pa ni nikoli pred začetkom podatkov.
+- **Nastavitve strategije:** za vsak privzeti parameter strategije je eno polje. Na backend se pošljejo samo spremenjene vrednosti, ki veljajo samo za ta test; `default_params` strategije ostanejo nespremenjeni.
+- **Napake:** validacijo opravi backend, napake so prikazane ob poljih (npr. veljaven razpon podatkov ob obdobju zunaj podatkov), razlog napake ali prekinitve strategije pa pod gumbom »Zaženi test«, brez notranjih podrobnosti strežnika.
+- **Po zagonu** se odpre stran rezultatov `#backtests/<id>`; njena polna vsebina (metrike, krivulja, stroški, posli) sledi v naslednji nalogi.
+- **Seznam zagonov:** lastni testi (zagon, obdobje, rezultat, vidnost), najnovejši prvi; klik na vrstico odpre rezultate. Filter po skupini sredstev (`asset_class`: Crypto, Forex, Indeksi, Zlato) in »Vse«; zagon z več sredstvi se prikaže v skupini vsakega svojega sredstva.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:
