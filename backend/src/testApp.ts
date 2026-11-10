@@ -14,10 +14,10 @@ const MIGRATIONS = fileURLToPath(new URL('../db/migrations', import.meta.url));
 export const PASSWORD = 'geslo1234';
 
 // Zažene aplikacijo nad začasno bazo z migracijami in jo po testu ugasne.
-export async function withApp(fn: (base: string, pool: Pool) => Promise<void>): Promise<void> {
+export async function withApp(fn: (base: string, pool: Pool) => Promise<void>, dataDir = '/ni-podatkov'): Promise<void> {
   await withTestDb(async (pool) => {
     await migrate(pool, MIGRATIONS);
-    const server = createApp(pool, createCandleStore('/ni-podatkov'), TEST_SECRET).listen(0);
+    const server = createApp(pool, createCandleStore(dataDir), TEST_SECRET).listen(0);
     await once(server, 'listening');
     try {
       await fn(`http://127.0.0.1:${(server.address() as AddressInfo).port}`, pool);
