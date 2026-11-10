@@ -1,9 +1,18 @@
 import bcrypt from 'bcryptjs';
 import type { Pool } from 'pg';
+import { clearedCookie, sessionCookie, signToken } from './session.ts';
 
 export interface Result {
   status: number;
   body: unknown;
+  headers?: Record<string, string>;
+}
+
+export interface User {
+  id: number;
+  email: string;
+  name: string;
+  role: 'trader' | 'mentor' | 'admin';
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -46,4 +55,27 @@ export async function register(pool: Pool, input: unknown): Promise<Result> {
     }
     throw err;
   }
+}
+
+// Gesla ob neznanem e-naslovu primerjamo z lažnim zgoščenim geslom, da odziv ne izdaja obstoja računa.
+const DUMMY_HASH = bcrypt.hashSync('ni-pravo-geslo', BCRYPT_COST);
+
+export async function login(pool: Pool, jwtSecret: string, input: unknown): Promise<Result> {
+  const body = typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+  const password = typeof body.password === 'string' ? body.password : '';
+
+  const row = (
+    await pool.query('SELECT id, email, name, role, password_hash, blocked FROM users WHERE email = $1', [email])
+  ).rows[0];
+  const valid = await bcrypt.compare(password, row?.password_hash ?? DUMMY_HASH);
+  if (!row || !valid) return { status: 401, body: { error: 'Napačen e-naslov ali geslo' } };
+  if (row.blocked) return { status: 403, body: { error: 'Račun je blokiran' } };
+
+  const user: User = { id: Number(row.id), email: row.email, name: row.name, role: row.role };
+  return { status: 200, body: user, headers: { 'Set-Cookie': sessionCookie(await signToken(jwtSecret, user.id)) } };
+}
+
+export function logout(): Result {
+  return { status: 200, body: { status: 'ok' }, headers: { 'Set-Cookie': clearedCookie() } };
 }

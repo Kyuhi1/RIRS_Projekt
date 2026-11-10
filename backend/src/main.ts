@@ -5,10 +5,12 @@ import { createPool } from './db.ts';
 import { migrate } from './migrate.ts';
 
 const port = Number(process.env.PORT ?? 3000);
+const jwtSecret = process.env.JWT_SECRET ?? '';
+if (jwtSecret.length < 32) throw new Error('JWT_SECRET mora imeti najmanj 32 znakov');
 
 const pool = createPool();
 const applied = await migrate(pool, fileURLToPath(new URL('../db/migrations', import.meta.url)));
 console.log(applied.length ? `Izvedene migracije: ${applied.join(', ')}` : 'Baza je posodobljena');
 
 const store = createCandleStore(process.env.DATA_DIR ?? '/data');
-createApp(pool, store).listen(port, () => console.log(`Backend posluša na portu ${port}`));
+createApp(pool, store, jwtSecret).listen(port, () => console.log(`Backend posluša na portu ${port}`));

@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import bcrypt from 'bcryptjs';
 import type { Pool } from 'pg';
 import { createApp } from './app.ts';
+import { TEST_SECRET } from './testApp.ts';
 import { createCandleStore } from './candles.ts';
 import { migrate } from './migrate.ts';
 import { withTestDb } from './testDb.ts';
@@ -17,7 +18,7 @@ const VALID = { name: 'Ana Novak', email: 'ana@example.com', password: 'geslo123
 async function withApp(fn: (post: (body: unknown) => Promise<Response>, pool: Pool) => Promise<void>) {
   await withTestDb(async (pool) => {
     await migrate(pool, MIGRATIONS);
-    const server = createApp(pool, createCandleStore('/ni-podatkov')).listen(0);
+    const server = createApp(pool, createCandleStore('/ni-podatkov'), TEST_SECRET).listen(0);
     await once(server, 'listening');
     try {
       const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/auth/register`;

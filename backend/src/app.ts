@@ -1,13 +1,21 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { Pool } from 'pg';
-import { register, type Result } from './auth.ts';
+import { login, logout, register, type Result, type User } from './auth.ts';
 import type { CandleStore } from './candles.ts';
+import { COOKIE_NAME, readCookie, verifyToken } from './session.ts';
 
 interface Deps {
   pool: Pool;
   store: CandleStore;
+  jwtSecret: string;
+  user: User | null; // prijavljeni uporabnik; pri javnih poteh null
 }
 type Handler = (deps: Deps, req: IncomingMessage) => Promise<Result>;
+type Role = User['role'];
+interface Route {
+  handle: Handler;
+  roles?: Role[]; // če je podano, mora biti uporabnik prijavljen in imeti eno od teh vlog
+}
 
 class BadRequest extends Error {}
 
@@ -52,21 +60,40 @@ const instruments: Handler = async ({ pool, store }) => {
   );
 };
 
-// Pot -> metoda -> obravnava. Pot z drugo metodo vrne 405.
-const routes: Record<string, Record<string, Handler>> = {
-  '/api/health': { GET: async () => ok({ status: 'ok' }) },
-  '/api/instruments': { GET: instruments },
-  '/api/venues': { GET: select('SELECT id, name, maker_pct, taker_pct, pay_spread FROM venues ORDER BY id') },
+const open = (handle: Handler): Route => ({ handle });
+const guarded = (roles: Role[], handle: Handler): Route => ({ roles, handle });
+const ANY_ROLE: Role[] = ['trader', 'mentor', 'admin'];
+
+// Pot -> metoda -> pot z obravnavo. Pot z drugo metodo vrne 405.
+const routes: Record<string, Record<string, Route>> = {
+  '/api/health': { GET: open(async () => ok({ status: 'ok' })) },
+  '/api/instruments': { GET: open(instruments) },
+  '/api/venues': { GET: open(select('SELECT id, name, maker_pct, taker_pct, pay_spread FROM venues ORDER BY id')) },
   '/api/prop-plans': {
-    GET: select(
-      `SELECT id, firm_name, plan_name, account_size, max_daily_loss, max_total_loss, profit_target
-       FROM prop_plans ORDER BY id`,
+    GET: open(
+      select(
+        `SELECT id, firm_name, plan_name, account_size, max_daily_loss, max_total_loss, profit_target
+         FROM prop_plans ORDER BY id`,
+      ),
     ),
   },
-  '/api/auth/register': { POST: async ({ pool }, req) => register(pool, await readJson(req)) },
+  '/api/auth/register': { POST: open(async ({ pool }, req) => register(pool, await readJson(req))) },
+  '/api/auth/login': { POST: open(async ({ pool, jwtSecret }, req) => login(pool, jwtSecret, await readJson(req))) },
+  '/api/auth/logout': { POST: open(async () => logout()) },
+  '/api/auth/me': { GET: guarded(ANY_ROLE, async ({ user }) => ok(user)) },
 };
 
-export function createApp(pool: Pool, store: CandleStore): Server {
+// Uporabnika preberemo iz piškotka in ga ob vsakem zahtevku preverimo v bazi (vloga, blocked).
+async function currentUser(pool: Pool, jwtSecret: string, req: IncomingMessage): Promise<User | null> {
+  const token = readCookie(req.headers.cookie, COOKIE_NAME);
+  const id = token ? await verifyToken(jwtSecret, token) : null;
+  if (id === null) return null;
+  const row = (await pool.query('SELECT id, email, name, role, blocked FROM users WHERE id = $1', [id])).rows[0];
+  if (!row || row.blocked) return null;
+  return { id: Number(row.id), email: row.email, name: row.name, role: row.role };
+}
+
+export function createApp(pool: Pool, store: CandleStore, jwtSecret: string): Server {
   return createServer(async (req, res) => {
     const send = (status: number, body: unknown, headers: Record<string, string> = {}) => {
       res.writeHead(status, { 'Content-Type': 'application/json', ...headers });
@@ -75,12 +102,17 @@ export function createApp(pool: Pool, store: CandleStore): Server {
 
     const methods = routes[new URL(req.url ?? '/', 'http://localhost').pathname];
     if (!methods) return send(404, { error: 'Not found' });
-    const handler = methods[req.method ?? ''];
-    if (!handler) return send(405, { error: 'Method not allowed' }, { Allow: Object.keys(methods).join(', ') });
+    const route = methods[req.method ?? ''];
+    if (!route) return send(405, { error: 'Method not allowed' }, { Allow: Object.keys(methods).join(', ') });
 
     try {
-      const result = await handler({ pool, store }, req);
-      send(result.status, result.body);
+      const user = await currentUser(pool, jwtSecret, req);
+      if (route.roles) {
+        if (!user) return send(401, { error: 'Prijava je obvezna' });
+        if (!route.roles.includes(user.role)) return send(403, { error: 'Dostop ni dovoljen' });
+      }
+      const result = await route.handle({ pool, store, jwtSecret, user }, req);
+      send(result.status, result.body, result.headers);
     } catch (err) {
       if (err instanceof BadRequest) return send(400, { error: 'Neveljavna zahteva' });
       console.error(err);
