@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: backtester
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: backtester
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U backtester -d backtester"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://backtester:test@localhost:5432/backtester
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Backend
+        working-directory: backend
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+
+      - name: Frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
