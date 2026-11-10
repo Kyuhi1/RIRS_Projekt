@@ -1,0 +1,13 @@
+body { font-family: system-ui, sans-serif; margin: 0; color: #222; background: #f7f7f7; }
+.top { display: flex; align-items: center; gap: 1.5rem; padding: 1rem 2rem; background: #fff; border-bottom: 1px solid #ddd; }
+.top nav { display: flex; gap: 0.5rem; }
+.top nav a { padding: 0.25rem 0.75rem; border: 1px solid #ccc; border-radius: 4px; color: inherit; text-decoration: none; background: #f0f0f0; }
+.panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; max-width: 960px; margin: 2rem auto; padding: 0 1rem; align-items: start; }
+.panels section { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 1rem 1.25rem; }
+h2 { margin-top: 0; font-size: 1.1rem; }
+label { display: block; margin-top: 0.75rem; font-size: 0.85rem; color: #555; }
+input, select { width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; font: inherit; }
+button { margin-top: 1rem; padding: 0.5rem 1rem; font: inherit; cursor: pointer; }
+.error { display: block; min-height: 1.1em; font-size: 0.8rem; color: #b00020; }
+.success { color: #1b6e2d; }
+@media (max-width: 700px) { .panels { grid-template-columns: 1fr; } }
