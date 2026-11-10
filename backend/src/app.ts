@@ -67,10 +67,11 @@ const ANY_ROLE: Role[] = ['trader', 'mentor', 'admin'];
 // Pot -> metoda -> pot z obravnavo. Pot z drugo metodo vrne 405.
 const routes: Record<string, Record<string, Route>> = {
   '/api/health': { GET: open(async () => ok({ status: 'ok' })) },
-  '/api/instruments': { GET: open(instruments) },
-  '/api/venues': { GET: open(select('SELECT id, name, maker_pct, taker_pct, pay_spread FROM venues ORDER BY id')) },
+  '/api/instruments': { GET: guarded(ANY_ROLE, instruments) },
+  '/api/venues': { GET: guarded(ANY_ROLE, select('SELECT id, name, maker_pct, taker_pct, pay_spread FROM venues ORDER BY id')) },
   '/api/prop-plans': {
-    GET: open(
+    GET: guarded(
+      ANY_ROLE,
       select(
         `SELECT id, firm_name, plan_name, account_size, max_daily_loss, max_total_loss, profit_target
          FROM prop_plans ORDER BY id`,
@@ -81,6 +82,9 @@ const routes: Record<string, Record<string, Route>> = {
   '/api/auth/login': { POST: open(async ({ pool, jwtSecret }, req) => login(pool, jwtSecret, await readJson(req))) },
   '/api/auth/logout': { POST: open(async () => logout()) },
   '/api/auth/me': { GET: guarded(ANY_ROLE, async ({ user }) => ok(user)) },
+  '/api/admin/users': {
+    GET: guarded(['admin'], select('SELECT id, email, name, role, blocked, created_at FROM users ORDER BY id')),
+  },
 };
 
 // Uporabnika preberemo iz piškotka in ga ob vsakem zahtevku preverimo v bazi (vloga, blocked).

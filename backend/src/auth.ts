@@ -79,3 +79,22 @@ export async function login(pool: Pool, jwtSecret: string, input: unknown): Prom
 export function logout(): Result {
   return { status: 200, body: { status: 'ok' }, headers: { 'Set-Cookie': clearedCookie() } };
 }
+
+// Ob zagonu zagotovi administratorski račun iz ADMIN_EMAIL in ADMIN_PASSWORD.
+// Obstoječemu računu z istim e-naslovom nastavi vlogo admin in ga odblokira, gesla ne spremeni.
+export async function ensureAdmin(pool: Pool, email: string | undefined, password: string | undefined): Promise<'created' | 'updated' | 'skipped'> {
+  const normalized = (email ?? '').trim().toLowerCase();
+  if (!normalized || !password) return 'skipped';
+  if (!EMAIL.test(normalized)) throw new Error('ADMIN_EMAIL ni veljaven e-naslov');
+  if (password.length < 8) throw new Error('ADMIN_PASSWORD mora imeti najmanj 8 znakov');
+  if (Buffer.byteLength(password) > 72) throw new Error('ADMIN_PASSWORD je predolg (največ 72 bajtov)');
+
+  const hash = await bcrypt.hash(password, BCRYPT_COST);
+  const result = await pool.query(
+    `INSERT INTO users (email, name, password_hash, role) VALUES ($1, 'Administrator', $2, 'admin')
+     ON CONFLICT (email) DO UPDATE SET role = 'admin', blocked = false
+     RETURNING (xmax = 0) AS inserted`,
+    [normalized, hash],
+  );
+  return result.rows[0].inserted ? 'created' : 'updated';
+}
