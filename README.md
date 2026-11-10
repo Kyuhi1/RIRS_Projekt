@@ -297,6 +297,12 @@ Pravila:
 - **Prekinitev:** aktivno povezavo prekine mentor ali trgovec. Mentor teste učenca vidi samo, dokler je povezava `active`; ta pogoj uporabijo naslednje naloge (oddaja in pregled testov).
 - **Dostop:** uporabnik vidi samo svoje povezave; tuja povezava je kot neobstoječa (`404`, P1). Dejanje v nedovoljenem stanju vrne `409`. Administrator in neprijavljeni nimata dostopa (`403`, `401`). Trgovec v odgovoru ne dobi mentorjevega e-naslova.
 
+Frontend:
+
+- **Mentorjev dashboard** (`#dashboard`, wireframe WF-04): panel »Učenci« (ime, e-naslov, stanje povezave; pri aktivnih učencih gumb »Odstrani« z dvostopenjsko potrditvijo) in »Povabi učenca« (e-naslov, »Pošlji vabilo«; razlog zavrnitve je ob polju). Panela »Zagoni za pregled« in »Skupna analitika učencev« sta zaenkrat prostor za naslednje naloge. Stolpec »Čaka« (število testov za pregled) se doda, ko trgovci lahko oddajajo teste.
+- **Stran Mentor trgovca** (`#mentor`): trenutni mentor z gumbom »Prekini povezavo« (s potrditvijo) in čakajoča vabila z imenom mentorja ter gumboma »Sprejmi« in »Zavrni«. Če trgovec že ima aktivnega mentorja, je ob sprejemu drugega vabila prikazano »Že imate aktivnega mentorja«.
+- Po vsakem dejanju se stran osveži; če se je stanje povezave medtem spremenilo (`404`, `409`), je prikazan razlog, vsebina pa se po kratkem času osveži.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:

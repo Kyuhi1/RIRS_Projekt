@@ -1,5 +1,6 @@
 import { errorMessage, getJson } from './api';
 import { renderBacktests } from './backtests';
+import { renderMentorDashboard, renderTraderMentor } from './mentorLinks';
 import { renderStrategies } from './strategies';
 
 // Strani za posamezne vloge. Vsebina razen administracije sledi v naslednjih nalogah.
@@ -52,6 +53,8 @@ function showError(container: HTMLElement): void {
 
 export function renderPage(container: HTMLElement, page: string, onUnauthorized: () => void, arg?: string): void {
   if (page === 'backtests') return void renderBacktests(container, arg, onUnauthorized).catch(() => showError(container));
+  if (page === 'dashboard') return void renderMentorDashboard(container, onUnauthorized).catch(() => showError(container));
+  if (page === 'mentor') return void renderTraderMentor(container, onUnauthorized).catch(() => showError(container));
   if (page === 'strategije') return void renderStrategies(container, arg, onUnauthorized).catch(() => showError(container));
   container.innerHTML = '<h2></h2>';
   container.querySelector('h2')!.textContent = PAGE_TITLES[page] ?? page;
