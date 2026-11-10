@@ -4,7 +4,7 @@ import { login, logout, register, type Result, type User } from './auth.ts';
 import { createBacktest, getBacktest, getTrades, listBacktests } from './backtestsApi.ts';
 import type { CandleStore } from './candles.ts';
 import { COOKIE_NAME, readCookie, verifyToken } from './session.ts';
-import { createStrategy, getStrategy, listStrategies } from './strategies.ts';
+import { createStrategy, deleteStrategy, getStrategy, listStrategies, updateStrategy } from './strategies.ts';
 
 interface Deps {
   pool: Pool;
@@ -103,7 +103,18 @@ const routes: Record<string, Record<string, Route>> = {
       }
     }),
   },
-  '/api/strategies/:id': { GET: guarded(ANY_ROLE, async ({ pool, user, params }) => getStrategy(pool, user!, params.id!)) },
+  '/api/strategies/:id': {
+    GET: guarded(ANY_ROLE, async ({ pool, user, params }) => getStrategy(pool, user!, params.id!)),
+    PATCH: guarded(['trader'], async ({ pool, user, params }, req) => {
+      try {
+        return await updateStrategy(pool, user!, params.id!, await readJson(req, STRATEGY_BODY_MAX));
+      } catch (err) {
+        if (err instanceof BodyTooLarge) return { status: 400, body: { errors: { source: 'Datoteka je prevelika, dovoljenih je največ 100 KB' } } };
+        throw err;
+      }
+    }),
+    DELETE: guarded(['trader'], async ({ pool, user, params }) => deleteStrategy(pool, user!, params.id!)),
+  },
   '/api/backtests': {
     GET: guarded(['trader'], async ({ pool, user }) => listBacktests(pool, user!)),
     POST: guarded(['trader'], async ({ pool, store, user }, req) => createBacktest(pool, store, user!, await readJson(req))),
