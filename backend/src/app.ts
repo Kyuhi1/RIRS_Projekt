@@ -3,12 +3,14 @@ import type { Pool } from 'pg';
 import { login, logout, register, type Result, type User } from './auth.ts';
 import type { CandleStore } from './candles.ts';
 import { COOKIE_NAME, readCookie, verifyToken } from './session.ts';
+import { getStrategy, listStrategies } from './strategies.ts';
 
 interface Deps {
   pool: Pool;
   store: CandleStore;
   jwtSecret: string;
   user: User | null; // prijavljeni uporabnik; pri javnih poteh null
+  params: Record<string, string>; // deli poti, npr. :id
 }
 type Handler = (deps: Deps, req: IncomingMessage) => Promise<Result>;
 type Role = User['role'];
@@ -82,10 +84,18 @@ const routes: Record<string, Record<string, Route>> = {
   '/api/auth/login': { POST: open(async ({ pool, jwtSecret }, req) => login(pool, jwtSecret, await readJson(req))) },
   '/api/auth/logout': { POST: open(async () => logout()) },
   '/api/auth/me': { GET: guarded(ANY_ROLE, async ({ user }) => ok(user)) },
+  '/api/strategies': { GET: guarded(ANY_ROLE, async ({ pool, user }) => listStrategies(pool, user!)) },
+  '/api/strategies/:id': { GET: guarded(ANY_ROLE, async ({ pool, user, params }) => getStrategy(pool, user!, params.id!)) },
   '/api/admin/users': {
     GET: guarded(['admin'], select('SELECT id, email, name, role, blocked, created_at FROM users ORDER BY id')),
   },
 };
+
+// Poti z deli (:id) pretvorimo v regularne izraze; pot -> metode.
+const compiled = Object.entries(routes).map(([pattern, methods]) => ({
+  regex: new RegExp(`^${pattern.replace(/:(\w+)/g, '(?<$1>[^/]+)')}$`),
+  methods,
+}));
 
 // Uporabnika preberemo iz piškotka in ga ob vsakem zahtevku preverimo v bazi (vloga, blocked).
 async function currentUser(pool: Pool, jwtSecret: string, req: IncomingMessage): Promise<User | null> {
@@ -104,8 +114,11 @@ export function createApp(pool: Pool, store: CandleStore, jwtSecret: string): Se
       res.end(JSON.stringify(body));
     };
 
-    const methods = routes[new URL(req.url ?? '/', 'http://localhost').pathname];
-    if (!methods) return send(404, { error: 'Not found' });
+    const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+    const match = compiled.map((c) => ({ methods: c.methods, found: c.regex.exec(pathname) })).find((c) => c.found);
+    if (!match) return send(404, { error: 'Not found' });
+    const { methods } = match;
+    const params = { ...match.found!.groups };
     const route = methods[req.method ?? ''];
     if (!route) return send(405, { error: 'Method not allowed' }, { Allow: Object.keys(methods).join(', ') });
 
@@ -115,7 +128,7 @@ export function createApp(pool: Pool, store: CandleStore, jwtSecret: string): Se
         if (!user) return send(401, { error: 'Prijava je obvezna' });
         if (!route.roles.includes(user.role)) return send(403, { error: 'Dostop ni dovoljen' });
       }
-      const result = await route.handle({ pool, store, jwtSecret, user }, req);
+      const result = await route.handle({ pool, store, jwtSecret, user, params }, req);
       send(result.status, result.body, result.headers);
     } catch (err) {
       if (err instanceof BadRequest) return send(400, { error: 'Neveljavna zahteva' });
