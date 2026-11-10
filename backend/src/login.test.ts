@@ -81,7 +81,11 @@ test('odjava izbriše piškotek; ponarejen, potekel in blokiran žeton ne dajo d
     assert.equal((await me(cookie)).status, 200);
     assert.equal((await me('token=')).status, 401); // po odjavi brskalnik pošlje prazen piškotek
 
-    assert.equal((await me(`${cookie.slice(0, -2)}xx`)).status, 401); // spremenjen podpis
+    // Spremenjen podpis. Zamenjamo znak sredi podpisa: zadnji znak base64url nosi le 4 pomembne bite,
+    // zato bi sprememba zadnjih znakov občasno dala enak podpis in bi bil test nestabilen.
+    const at = cookie.length - 10;
+    const tampered = `${cookie.slice(0, at)}${cookie[at] === 'A' ? 'B' : 'A'}${cookie.slice(at + 1)}`;
+    assert.equal((await me(tampered)).status, 401);
     const foreign = await signToken('druga-skrivnost-druga-skrivnost-123456', 1);
     assert.equal((await me(`token=${foreign}`)).status, 401); // podpisan z drugo skrivnostjo
 
