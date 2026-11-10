@@ -277,6 +277,26 @@ Stran `#backtests/<id>` (trgovec, wireframe WF-03) prikazuje:
 
 Besedilo iz podatkov (ime strategije, parametri) se vstavlja kot besedilo, ne kot HTML. Neobstoječ ali tuj test prikaže sporočilo »Test ne obstaja«.
 
+## Povezava mentor–trgovec
+
+Tabela `mentor_links` (migracija `009_mentor_links.sql`, docs/03) hrani povezavo med mentorjem in učencem (trgovcem), ki jo ustvari vabilo. Stanja: `invited` (vabilo), `active`, `declined` in `ended`.
+
+| Pot | Vloga | Opis |
+|---|---|---|
+| `GET /api/mentor-links` | mentor, trgovec | povezave prijavljenega uporabnika, najnovejše prve: `{ id, status, created_at, updated_at, mentor: { id, name }, trader: { id, name, email } }` |
+| `POST /api/mentor-links` | mentor | vabilo trgovca: `{ "email": "..." }`; `201` z novo povezavo |
+| `POST /api/mentor-links/:id/accept` | trgovec | sprejme vabilo (`invited` → `active`) |
+| `POST /api/mentor-links/:id/decline` | trgovec | zavrne vabilo (`invited` → `declined`) |
+| `POST /api/mentor-links/:id/end` | mentor ali trgovec | prekine aktivno povezavo (`active` → `ended`) |
+
+Pravila:
+
+- **Vabilo:** e-naslov se normalizira (trim, male črke). Če trgovec ne obstaja, ima drugo vlogo ali je blokiran, vabilo ni ustvarjeno in odgovor je `400` z `{ "errors": { "email": "Registriran trgovec s tem e-naslovom ne obstaja" } }`. Sporočilo je enako v vseh teh primerih, da vabilo ne razkrije, kakšen račun ima e-naslov.
+- **Enoličen par:** par (`mentor_id`, `trader_id`) je enoličen, zato je vsako naslednje vabilo istemu trgovcu zavrnjeno (`409`, sporočilo glede na stanje: čaka na odgovor, že učenec, zavrnjeno, prekinjeno). Po zavrnitvi ali prekinitvi ponovno vabilo istega mentorja torej ni mogoče; drug mentor lahko trgovca povabi.
+- **En aktiven mentor:** trgovec z aktivnim mentorjem ne more sprejeti drugega vabila (`409`, »Že imate aktivnega mentorja«); vabilo ostane v stanju `invited`. Pravilo zagotavlja delni enolični indeks `mentor_links_one_active_mentor_idx` (`trader_id` pri `status = 'active'`), zato velja tudi pri sočasnih zahtevkih. Po prekinitvi aktivne povezave je sprejem drugega vabila spet mogoč.
+- **Prekinitev:** aktivno povezavo prekine mentor ali trgovec. Mentor teste učenca vidi samo, dokler je povezava `active`; ta pogoj uporabijo naslednje naloge (oddaja in pregled testov).
+- **Dostop:** uporabnik vidi samo svoje povezave; tuja povezava je kot neobstoječa (`404`, P1). Dejanje v nedovoljenem stanju vrne `409`. Administrator in neprijavljeni nimata dostopa (`403`, `401`). Trgovec v odgovoru ne dobi mentorjevega e-naslova.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:

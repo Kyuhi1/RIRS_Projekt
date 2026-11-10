@@ -4,6 +4,7 @@ import { login, logout, register, type Result, type User } from './auth.ts';
 import { createBacktest, getBacktest, getTrades, listBacktests } from './backtestsApi.ts';
 import type { CandleStore } from './candles.ts';
 import { COOKIE_NAME, readCookie, verifyToken } from './session.ts';
+import { acceptLink, declineLink, endLink, invite, listLinks } from './mentorLinks.ts';
 import { createStrategy, deleteStrategy, getStrategy, listStrategies, updateStrategy } from './strategies.ts';
 
 interface Deps {
@@ -124,6 +125,13 @@ const routes: Record<string, Record<string, Route>> = {
     GET: guarded(['trader'], async ({ pool, user, params }, req) =>
       getTrades(pool, user!, params.id!, new URL(req.url ?? '/', 'http://localhost').searchParams.get('page'))),
   },
+  '/api/mentor-links': {
+    GET: guarded(['mentor', 'trader'], async ({ pool, user }) => listLinks(pool, user!)),
+    POST: guarded(['mentor'], async ({ pool, user }, req) => invite(pool, user!, await readJson(req))),
+  },
+  '/api/mentor-links/:id/accept': { POST: guarded(['trader'], async ({ pool, user, params }) => acceptLink(pool, user!, params.id!)) },
+  '/api/mentor-links/:id/decline': { POST: guarded(['trader'], async ({ pool, user, params }) => declineLink(pool, user!, params.id!)) },
+  '/api/mentor-links/:id/end': { POST: guarded(['mentor', 'trader'], async ({ pool, user, params }) => endLink(pool, user!, params.id!)) },
   '/api/admin/users': {
     GET: guarded(['admin'], select('SELECT id, email, name, role, blocked, created_at FROM users ORDER BY id')),
   },
