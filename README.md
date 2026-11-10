@@ -188,6 +188,32 @@ Obe poti zahtevata prijavo. Zasebnih strategij drugih uporabnikov ne vidi nihče
 
 Frontend: stran **Strategije** (trgovec) prikaže tabelo z imenom, opisom, avtorjem in oznako Zasebna/Deljena.
 
+## Testi (backtests)
+
+Tabeli `backtests` in `backtest_instruments` (migracija `007_backtests.sql`) hranita teste: lastnika, strategijo, borzo, obdobje (`period_from`, `period_to`, oba dneva vključno, UTC), uporabljene parametre, rezultate, stanje (`draft` ob nastanku) in vidnost (`private`). Test se shrani šele po uspešnem izračunu.
+
+| Pot | Opis |
+|---|---|
+| `POST /api/backtests` | izračuna test in ga shrani kot `draft`; `201` s polnim testom |
+| `GET /api/backtests` | testi prijavljenega trgovca, najnovejši prvi, s povzetkom rezultatov (`summary`) |
+| `GET /api/backtests/:id` | poln test z `results` (metrike, stroški, dnevna krivulja, posli); tuj ali neobstoječ test vrne `404` |
+
+Poti so samo za vlogo trgovec (`401` brez prijave, `403` za mentorja in administratorja).
+
+Telo zahtevka `POST /api/backtests` (JSON):
+
+| Polje | Pravilo |
+|---|---|
+| `strategy_id` | obvezno; strategija, ki jo uporabnik sme videti (sistemska, lastna ali deljena) |
+| `instruments` | obvezno; vsaj eno, neponovljeno sredstvo (`ticker`) |
+| `venue_id` | obvezno; borza |
+| `from`, `to` | obvezna, `YYYY-MM-DD`; `from` mora biti pred `to`, obdobje pa v razponu podatkov vseh izbranih sredstev (po dnevih, UTC) |
+| `params` | neobvezno; objekt, ki se združi s `default_params` strategije samo za ta test (strategija ostane nespremenjena) |
+
+Odgovori ob napaki: `400` z `{ "errors": { "<polje>": "<sporočilo>" } }` pri neveljavnem vhodu (polja `strategy_id`, `instruments`, `venue_id`, `from`, `to`, `params` in `period`; pri obdobju zunaj podatkov sporočilo vsebuje veljaven razpon) in `422` z `{ "error": "<razlog>" }`, če strategija vrže napako, preseže čas ali vrne neveljavne posle. V obeh primerih se test ne shrani, sporočilo pa ne vsebuje notranjih podrobnosti strežnika.
+
+Izračun: strategija teče v delavcu za vsako izbrano sredstvo (skupna omejitev 60 s), nato `simulate` (poglavje »Simulacija«) izračuna rezultat z borzo in razponi iz baze. Začetni kapital testa je 10.000 in se enakomerno razdeli med izbrana sredstva. V `results` so metrike (`netProfit`, `returnPct`, `tradeCount`, `winRatePct`, `maxDrawdownPct`), bruto dobiček in stroški (`grossProfit`, `costs`), dnevna krivulja (`equityCurve`) in posli (`trades`).
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:
