@@ -58,8 +58,29 @@ export async function listBacktests(pool: Pool, user: User): Promise<Result> {
 }
 
 // Test vidi samo lastnik; tuj ali neobstoječ test vrne 404.
+// Posli niso del odgovora (lahko jih je veliko); dobi jih `getTrades` po straneh.
 export async function getBacktest(pool: Pool, user: User, id: string, status = 200): Promise<Result> {
   if (!/^\d{1,15}$/.test(id)) return { status: 404, body: { error: 'Test ne obstaja' } };
-  const { rows } = await pool.query(`${SELECT}, b.results ${FROM} WHERE b.id = $1 AND b.owner_id = $2`, [id, user.id]);
+  const { rows } = await pool.query(`${SELECT}, b.results - 'trades' AS results ${FROM} WHERE b.id = $1 AND b.owner_id = $2`, [id, user.id]);
   return rows[0] ? { status, body: withId(rows[0]) } : { status: 404, body: { error: 'Test ne obstaja' } };
+}
+
+export const TRADES_PAGE_SIZE = 20;
+
+// Posli testa, razvrščeni po času vstopa (pri enakem času po vrstnem redu izračuna), po 20 na stran.
+// `page` je celo število od 1 naprej; stran za zadnjo je veljavna in vrne prazen seznam.
+export async function getTrades(pool: Pool, user: User, id: string, page: string | null): Promise<Result> {
+  if (!/^\d{1,15}$/.test(id)) return { status: 404, body: { error: 'Test ne obstaja' } };
+  if (page !== null && !/^[1-9]\d{0,8}$/.test(page)) return { status: 400, body: { errors: { page: 'Stran mora biti celo število od 1 naprej' } } };
+  const number = page === null ? 1 : Number(page);
+  const { rows } = await pool.query(
+    `SELECT jsonb_array_length(b.results -> 'trades') AS total,
+            ARRAY(SELECT x.t FROM jsonb_array_elements(b.results -> 'trades') WITH ORDINALITY AS x(t, n)
+                  ORDER BY (x.t ->> 'entryTime')::bigint, x.n OFFSET $3 LIMIT $4) AS trades
+     FROM backtests b WHERE b.id = $1 AND b.owner_id = $2`,
+    [id, user.id, (number - 1) * TRADES_PAGE_SIZE, TRADES_PAGE_SIZE],
+  );
+  if (!rows[0]) return { status: 404, body: { error: 'Test ne obstaja' } };
+  const total = rows[0].total as number;
+  return { status: 200, body: { page: number, pageSize: TRADES_PAGE_SIZE, total, pages: Math.max(1, Math.ceil(total / TRADES_PAGE_SIZE)), trades: rows[0].trades } };
 }
