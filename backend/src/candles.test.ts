@@ -56,6 +56,16 @@ test('candles vrne svečke samo za podano obdobje, urejene po času', async () =
   });
 });
 
+test('count vrne število svečk v obdobju brez nalaganja, brez podatkov 0', async () => {
+  await withDataDir(async (dir) => {
+    const store = createCandleStore(dir);
+    assert.equal(await store.count('BTCUSDT', 0, Date.now()), 2880);
+    assert.equal(await store.count('BTCUSDT', JAN, JAN + 10 * MIN), 10); // [od, do) brez zgornje meje
+    assert.equal(await store.count('BTCUSDT', JAN + 1430 * MIN, FEB + 10 * MIN), 20);
+    assert.equal(await store.count('ETHUSDT', 0, Date.now()), 0);
+  });
+});
+
 test('brez podatkov so rezultati prazni, neveljaven ticker je zavrnjen', async () => {
   const store = createCandleStore('/mapa-ne-obstaja');
   assert.equal(await store.range('BTCUSDT'), null);

@@ -20,6 +20,7 @@ export interface DataRange {
 export interface CandleStore {
   range(ticker: string): Promise<DataRange | null>;
   candles(ticker: string, fromMs: number, toMs: number): Promise<Candle[]>;
+  count(ticker: string, fromMs: number, toMs: number): Promise<number>; // število svečk v [fromMs, toMs), brez nalaganja
 }
 
 // Podatki so v <dataDir>/<TICKER>/*.parquet, npr. data/BTCUSDT/2024-01.parquet.
@@ -63,6 +64,13 @@ export function createCandleStore(dataDir: string): CandleStore {
         to: new Date(Number(row.last)).toISOString(),
         candles: Number(row.n),
       };
+    },
+
+    async count(ticker, fromMs, toMs) {
+      const files = await filesOf(ticker);
+      if (!files) return 0;
+      const [row] = await query('SELECT count(*) AS n FROM read_parquet(?) WHERE open_time >= ? AND open_time < ?', [files, fromMs, toMs]);
+      return Number(row.n);
     },
 
     // Svečke z open_time v [fromMs, toMs), urejene po času.
