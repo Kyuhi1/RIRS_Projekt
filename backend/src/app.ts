@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { Pool } from 'pg';
 import { login, logout, register, type Result, type User } from './auth.ts';
+import { createBacktest, getBacktest, listBacktests } from './backtestsApi.ts';
 import type { CandleStore } from './candles.ts';
 import { COOKIE_NAME, readCookie, verifyToken } from './session.ts';
 import { getStrategy, listStrategies } from './strategies.ts';
@@ -86,6 +87,11 @@ const routes: Record<string, Record<string, Route>> = {
   '/api/auth/me': { GET: guarded(ANY_ROLE, async ({ user }) => ok(user)) },
   '/api/strategies': { GET: guarded(ANY_ROLE, async ({ pool, user }) => listStrategies(pool, user!)) },
   '/api/strategies/:id': { GET: guarded(ANY_ROLE, async ({ pool, user, params }) => getStrategy(pool, user!, params.id!)) },
+  '/api/backtests': {
+    GET: guarded(['trader'], async ({ pool, user }) => listBacktests(pool, user!)),
+    POST: guarded(['trader'], async ({ pool, store, user }, req) => createBacktest(pool, store, user!, await readJson(req))),
+  },
+  '/api/backtests/:id': { GET: guarded(['trader'], async ({ pool, user, params }) => getBacktest(pool, user!, params.id!)) },
   '/api/admin/users': {
     GET: guarded(['admin'], select('SELECT id, email, name, role, blocked, created_at FROM users ORDER BY id')),
   },
