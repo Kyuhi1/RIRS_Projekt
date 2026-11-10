@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import type { Pool } from 'pg';
 import { createApp } from './app.ts';
+import { createCandleStore } from './candles.ts';
 import { migrate } from './migrate.ts';
 import { withTestDb } from './testDb.ts';
 
@@ -32,7 +33,7 @@ test('seed naloži referenčne podatke in se ob ponovnem zagonu ne podvaja', asy
 test('referenčni endpointi vračajo podatke, spreminjanje ni dovoljeno', async () => {
   await withTestDb(async (pool) => {
     await migrate(pool, MIGRATIONS);
-    const server = createApp(pool).listen(0);
+    const server = createApp(pool, createCandleStore('/ni-podatkov')).listen(0);
     await once(server, 'listening');
     try {
       const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
