@@ -1,4 +1,4 @@
-import { errorMessage, getJson } from './api';
+import { errorMessage, getJson, postJson } from './api';
 import { ASSET_CLASS_LABELS, type Reference } from './refdata';
 
 const DAY_MS = 86_400_000;
@@ -39,8 +39,33 @@ function fillOptions(select: HTMLSelectElement, items: { value: string; label: s
   items.forEach((item, i) => (select.options[i + 1]!.textContent = item.label));
 }
 
+// Spremenjene vrednosti parametrov (samo tiste, ki se razlikujejo od privzetih) ali napaka ob polju.
+function collectParams(container: HTMLElement): { params: Record<string, unknown> } | { error: string } {
+  const params: Record<string, unknown> = {};
+  for (const input of container.querySelectorAll<HTMLInputElement>('[data-param]')) {
+    const key = input.dataset.param!;
+    const original = JSON.parse(input.dataset.default!) as unknown;
+    let value: unknown;
+    if (typeof original === 'boolean') value = input.checked;
+    else if (typeof original === 'number') {
+      value = input.value.trim() === '' ? NaN : Number(input.value);
+      if (!Number.isFinite(value as number)) return { error: `Parameter ${key} mora biti število` };
+    } else if (typeof original === 'string') value = input.value;
+    else {
+      try {
+        value = JSON.parse(input.value);
+      } catch {
+        return { error: `Parameter ${key} mora biti veljaven JSON` };
+      }
+    }
+    if (JSON.stringify(value) !== JSON.stringify(original)) params[key] = value;
+  }
+  return { params };
+}
+
 // Obrazec »Nov test« (WF-02): strategija, sredstva, obdobje, borza, financiran račun, nastavitve strategije.
-export function renderNewTest(container: HTMLElement, ref: Reference): void {
+// Ob uspešnem zagonu pokliče onCreated z id-jem shranjenega testa.
+export function renderNewTest(container: HTMLElement, ref: Reference, onCreated: (id: number) => void): void {
   container.innerHTML = `
     <h2>Nov test</h2>
     <form id="new-test" novalidate>
@@ -183,6 +208,40 @@ export function renderNewTest(container: HTMLElement, ref: Reference): void {
       }
     } catch (err) {
       hintEl.textContent = err instanceof Error ? err.message : 'Parametrov ni mogoče naložiti';
+    }
+  });
+
+  // Zagon testa: validacijo opravi backend, napake prikažemo ob poljih (brez notranjih podrobnosti strežnika).
+  const form = $<HTMLFormElement>('#new-test');
+  const button = $<HTMLButtonElement>('#run');
+  const showErrors = (errors: Record<string, string>) =>
+    form.querySelectorAll<HTMLElement>('[data-error]').forEach((el) => (el.textContent = errors[el.dataset.error!] ?? ''));
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    showErrors({});
+    const collected = collectParams(container);
+    if ('error' in collected) return showErrors({ params: collected.error });
+
+    button.disabled = true;
+    button.textContent = 'Izvajam test ...';
+    try {
+      const { status, data } = await postJson('/api/backtests', {
+        strategy_id: strategy.value ? Number(strategy.value) : undefined,
+        instruments: selected(),
+        venue_id: venue.value,
+        from: $<HTMLInputElement>('#from').value,
+        to: $<HTMLInputElement>('#to').value,
+        params: collected.params,
+      });
+      if (status === 201) onCreated((data as { id: number }).id);
+      else if (status === 400 && data && typeof data === 'object' && 'errors' in data) showErrors(data.errors as Record<string, string>);
+      else showErrors({ form: errorMessage(data, 'Testa ni bilo mogoče izvesti, poskusite znova.') });
+    } catch {
+      showErrors({ form: 'Strežnik ni dosegljiv, poskusite znova.' });
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Zaženi test';
     }
   });
 }
