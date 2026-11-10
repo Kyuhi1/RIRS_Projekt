@@ -1,6 +1,7 @@
 import { errorMessage, getJson } from './api';
 import { renderNewTest } from './newTest';
 import { loadReference } from './refdata';
+import { renderRuns } from './runs';
 
 interface BacktestDetail {
   id: number;
@@ -28,7 +29,7 @@ async function renderResult(container: HTMLElement, id: string, onUnauthorized: 
   box.textContent = `Test #${t.id}: ${t.strategy_name}, ${t.instruments.join(', ')}, ${t.from} do ${t.to}, stanje ${t.status}.`;
 }
 
-// Stran Backtests (WF-02): levo obrazec za nov test, desno seznam zagonov (sledi).
+// Stran Backtests (WF-02): levo obrazec za nov test, desno seznam zagonov.
 export async function renderBacktests(container: HTMLElement, arg: string | undefined, onUnauthorized: () => void): Promise<void> {
   if (arg) return renderResult(container, arg, onUnauthorized);
 
@@ -40,4 +41,5 @@ export async function renderBacktests(container: HTMLElement, arg: string | unde
   renderNewTest(container.querySelector<HTMLElement>('#new-test-panel')!, ref, (id) => {
     location.hash = `backtests/${id}`; // po uspešnem zagonu se odpre stran rezultatov
   });
+  await renderRuns(container.querySelector<HTMLElement>('#runs-panel')!, ref, onUnauthorized);
 }

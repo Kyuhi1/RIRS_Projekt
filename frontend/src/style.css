@@ -32,3 +32,8 @@ label.check input { width: auto; margin: 0 0.35rem 0 0; }
 .params label { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .params input { width: 8rem; }
 .params input[type=checkbox] { width: auto; }
+.presets button.active { background: #222; color: #fff; border-color: #222; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover { background: #f5f5f5; }
+.positive { color: #1b6e2d; }
+.negative { color: #b00020; }
