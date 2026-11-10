@@ -183,10 +183,28 @@ Vstopi in izstopi so ob odprtju svečke po signalu, odprta pozicija se zapre ob 
 |---|---|
 | `GET /api/strategies` | sistemske strategije, uporabnikove in deljene strategije drugih: `{ id, name, description, author, visibility, system, mine }`; `author` je »Sistem« pri sistemskih; kode ne vrne |
 | `GET /api/strategies/:id` | isti podatki ter `source`, `default_params` in `created_at`; tuja zasebna ali neobstoječa strategija vrne `404` |
+| `POST /api/strategies` | naloži lastno strategijo (trgovec); `201` s celotno strategijo |
+| `PATCH /api/strategies/:id` | spremeni podana polja lastne strategije (trgovec) |
+| `DELETE /api/strategies/:id` | izbriše lastno strategijo brez testov (trgovec) |
 
-Obe poti zahtevata prijavo. Zasebnih strategij drugih uporabnikov ne vidi nihče, tudi administrator ne (P1).
+Branje zahteva prijavo. Zasebnih strategij drugih uporabnikov ne vidi nihče, tudi administrator ne (P1).
 
-Frontend: stran **Strategije** (trgovec) prikaže tabelo z imenom, opisom, avtorjem in oznako Zasebna/Deljena.
+### Nalaganje lastnih strategij
+
+Telo `POST` (JSON): `name`, `source` (besedilo datoteke), neobvezno `description` in `default_params`. Napake vrne `400` z `{ "errors": { "<polje>": "<sporočilo>" } }`, strategija se tedaj ne shrani.
+
+| Polje | Pravilo |
+|---|---|
+| `name` | obvezno, 3–80 znakov (po odstranitvi presledkov) |
+| `description` | neobvezno, največ 500 znakov |
+| `source` | obvezno, največ 100 KB (v bajtih), besedilo z `export default` (oblika v poglavju »Simulacija«), ki ga je mogoče razčleniti; sporočilo vsebuje razlog in vrstico |
+| `default_params` | neobvezno; JSON (besedilo ali objekt), ki je objekt z največ 20 parametri, vrednosti so število, besedilo ali `true`/`false` |
+
+Datoteka se pri nalaganju samo prevede (preverjanje sintakse), nikoli ne zažene; izvaja se šele v delavcu (poglavje »Izolirano izvajanje strategij«). Nova strategija je vedno `private` z lastnikom prijavljenega trgovca; deljenje ni del te funkcionalnosti, zato `PATCH` vidnosti in lastnika ne spreminja.
+
+`PATCH` spremeni samo podana polja z enakimi pravili. Urejanje in brisanje sme samo lastnik: tuja zasebna strategija vrne `404` (P1), vidna a tuja (sistemska ali deljena) pa `403`. Strategije, ki jo uporabljajo izvedeni testi, `DELETE` ne izbriše in vrne `409` z `{ "error": "...", "tests": N }`, kjer je `N` število testov. Urejanje takšne strategije je dovoljeno, shranjeni rezultati starih testov se ne spremenijo. Mentor in administrator dobita `403`.
+
+Frontend: stran **Strategije** (trgovec) prikaže tabelo z imenom, opisom, avtorjem in oznako Zasebna/Deljena. Gumb »Nova strategija« (`#strategije/nova`) odpre obrazec z imenom, opisom, datoteko `.js` in privzetimi parametri; končnico in velikost datoteke preveri že brskalnik, ostalo backend, napake pa so ob poljih. Pri lastnih strategijah sta dejanji »Uredi« (`#strategije/<id>`, datoteka je neobvezna) in »Izbriši« (s potrditvijo; če strategijo uporabljajo testi, je prikazano njihovo število). Povezava »Naloži lastno strategijo« je tudi v obrazcu Nov test; naložena strategija je ob vrnitvi na Backtests v izbirniku.
 
 ## Testi (backtests)
 

@@ -15,6 +15,8 @@ async function request(method: string, path: string, body?: unknown): Promise<Ap
 
 export const getJson = (path: string) => request('GET', path);
 export const postJson = (path: string, body: unknown = {}) => request('POST', path, body);
+export const patchJson = (path: string, body: unknown) => request('PATCH', path, body);
+export const deleteJson = (path: string) => request('DELETE', path);
 
 // Sporočilo o napaki iz odgovora strežnika ({ error }) ali podano nadomestno besedilo.
 export function errorMessage(data: unknown, fallback: string): string {
