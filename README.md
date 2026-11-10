@@ -167,6 +167,27 @@ Oblika strategije je `export default (bars, params) => trades[]` (glej poglavje 
 
 Omejitve: izolacija znotraj procesa Node.js ni popolna varnostna meja (ADR 0008); varuje pred napakami, neskončnimi zankami in dostopom do virov, ni pa zasnovana proti odločnemu napadalcu z izkoriščanjem napak v Node.js ali V8. Svečke se v delavec prenesejo kot JSON, zato je za zelo dolga obdobja pomnilniško potratno.
 
+## Strategije
+
+Tabela `strategies` (migracija `005_strategies.sql`) hrani strategije: lastnik (`owner_id`), ime, opis, kodo (`source`, oblika v poglavju »Simulacija«), privzete parametre (`default_params`, JSON) in vidnost (`private` ali `shared`). **Sistemske strategije nimajo lastnika** (`owner_id` je `NULL`) in so vedno deljene, kar zagotavlja omejitev `CHECK` v bazi. Migracija `006_seed_system_strategies.sql` naloži tri sistemske strategije:
+
+| Strategija | Opis | Privzeti parametri |
+|---|---|---|
+| Buy & Hold | kupi ob prvi svečki in drži do konca obdobja | / |
+| SMA Crossover | long, ko hitro drseče povprečje preseže počasnega, izstop ob obratu | `fast` 10, `slow` 30 |
+| Breakout (Donchian) | long ob preboju najvišje cene zadnjih `period` svečk, izstop pod najnižjo ceno zadnjih `exitPeriod` svečk | `period` 20, `exitPeriod` 10 |
+
+Vstopi in izstopi so ob odprtju svečke po signalu, odprta pozicija se zapre ob zaprtju zadnje svečke. Sistemske strategije se izvajajo v delavcu kot vsaka druga (poglavje »Izolirano izvajanje strategij«), test v `systemStrategies.test.ts` preveri, da vsaka vrne posle, ki jih simulator sprejme.
+
+| Pot | Opis |
+|---|---|
+| `GET /api/strategies` | sistemske strategije, uporabnikove in deljene strategije drugih: `{ id, name, description, author, visibility, system, mine }`; `author` je »Sistem« pri sistemskih; kode ne vrne |
+| `GET /api/strategies/:id` | isti podatki ter `source`, `default_params` in `created_at`; tuja zasebna ali neobstoječa strategija vrne `404` |
+
+Obe poti zahtevata prijavo. Zasebnih strategij drugih uporabnikov ne vidi nihče, tudi administrator ne (P1).
+
+Frontend: stran **Strategije** (trgovec) prikaže tabelo z imenom, opisom, avtorjem in oznako Zasebna/Deljena.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:
