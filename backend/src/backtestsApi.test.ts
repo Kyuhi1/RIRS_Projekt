@@ -26,7 +26,7 @@ const post = (base: string, path: string, cookie: string | undefined, body: unkn
 const get = (base: string, path: string, cookie?: string) => fetch(base + path, { headers: cookie ? { Cookie: cookie } : {} });
 const count = async (pool: Pool, table: string) => (await pool.query(`SELECT count(*)::int AS n FROM ${table}`)).rows[0].n as number;
 const valid = async (pool: Pool, extra: Record<string, unknown> = {}) => ({
-  strategy_id: await strategyId(pool, 'Buy & Hold'),
+  strategy_id: await strategyId(pool, 'Nakup in zadrži'),
   instruments: ['BTCUSDT'],
   venue_id: 'gross',
   from: '2024-01-01',
@@ -38,28 +38,28 @@ test('POST /api/backtests izračuna test in ga shrani v stanju draft z lastnikom
   await withData(async (base, pool) => {
     const email = await addUser(pool, 'trader');
     const cookie = await loginCookie(base, email);
-    const sma = await strategyId(pool, 'SMA Crossover');
+    const sma = await strategyId(pool, 'Presek drsečih povprečij (SMA)');
 
-    const res = await post(base, '/api/backtests', cookie, await valid(pool, { strategy_id: sma, instruments: ['ETHUSDT', 'BTCUSDT'], params: { fast: 5 } }));
+    const res = await post(base, '/api/backtests', cookie, await valid(pool, { strategy_id: sma, instruments: ['ETHUSDT', 'BTCUSDT'], params: { hitro_povprecje: 5 } }));
     assert.equal(res.status, 201);
     const body = (await res.json()) as any;
     assert.equal(body.status, 'draft');
     assert.equal(body.visibility, 'private');
     assert.deepEqual(body.instruments, ['BTCUSDT', 'ETHUSDT']);
-    assert.deepEqual(body.params, { fast: 5, slow: 30 });
-    assert.deepEqual([body.from, body.to, body.strategy_name, body.venue_id], ['2024-01-01', '2024-01-03', 'SMA Crossover', 'gross']);
+    assert.deepEqual(body.params, { hitro_povprecje: 5, pocasno_povprecje: 30 });
+    assert.deepEqual([body.from, body.to, body.strategy_name, body.venue_id], ['2024-01-01', '2024-01-03', 'Presek drsečih povprečij (SMA)', 'gross']);
     assert.equal(body.results.equityCurve.length, 3);
 
     const row = (await pool.query('SELECT owner_id, status, params FROM backtests')).rows[0];
     assert.equal(row.owner_id, (await pool.query('SELECT id FROM users WHERE email = $1', [email])).rows[0].id);
-    assert.deepEqual([row.status, row.params], ['draft', { fast: 5, slow: 30 }]);
+    assert.deepEqual([row.status, row.params], ['draft', { hitro_povprecje: 5, pocasno_povprecje: 30 }]);
     assert.deepEqual((await pool.query('SELECT ticker FROM backtest_instruments ORDER BY ticker')).rows.map((r) => r.ticker), ['BTCUSDT', 'ETHUSDT']);
     // parametri za test ne prepišejo privzetih parametrov strategije
-    assert.deepEqual((await pool.query('SELECT default_params FROM strategies WHERE id = $1', [sma])).rows[0].default_params, { fast: 10, slow: 30 });
+    assert.deepEqual((await pool.query('SELECT default_params FROM strategies WHERE id = $1', [sma])).rows[0].default_params, { hitro_povprecje: 10, pocasno_povprecje: 30 });
   });
 });
 
-test('rezultat testa se ujema z ročnim izračunom (Buy & Hold: (4419.5 - 100) * 100)', async () => {
+test('rezultat testa se ujema z ročnim izračunom (Nakup in zadrži: (4419.5 - 100) * 100)', async () => {
   await withData(async (base, pool) => {
     const cookie = await loginCookie(base, await addUser(pool, 'trader'));
     const body = (await (await post(base, '/api/backtests', cookie, await valid(pool))).json()) as any;
@@ -184,7 +184,7 @@ test('načrt financiranega računa se shrani s testom in vrne v odgovoru; brez n
     const res = await post(base, '/api/backtests', cookie, await valid(pool, { prop_plan_id: 'ftmo-2step-100k' }));
     assert.equal(res.status, 201);
     const body = (await res.json()) as any;
-    assert.deepEqual(body.prop_plan, { id: 'ftmo-2step-100k', firm_name: 'FTMO', plan_name: '2-Step 100k', account_size: 100000, profit_target: 10000, max_daily_loss: 5000, max_total_loss: 10000 });
+    assert.deepEqual(body.prop_plan, { id: 'ftmo-2step-100k', firm_name: 'FTMO', plan_name: '2 stopnji, 100k', account_size: 100000, profit_target: 10000, max_daily_loss: 5000, max_total_loss: 10000 });
     assert.equal(body.results.initialCapital, 100000);
     assert.equal(typeof body.challenge_passed, 'boolean');
     assert.equal(body.challenge_passed, body.results.challenge.passed);
@@ -210,7 +210,7 @@ test('baza zahteva izid preverjanja natanko takrat, ko je načrt izbran', async 
     const insert = (plan: string | null, passed: boolean | null) =>
       pool.query(
         `INSERT INTO backtests (owner_id, strategy_id, venue_id, period_from, period_to, results, prop_plan_id, challenge_passed)
-         SELECT u.id, s.id, 'gross', '2024-01-01', '2024-01-03', '{}', $1, $2 FROM users u, strategies s WHERE u.email = $3 AND s.name = 'Buy & Hold'`,
+         SELECT u.id, s.id, 'gross', '2024-01-01', '2024-01-03', '{}', $1, $2 FROM users u, strategies s WHERE u.email = $3 AND s.name = 'Nakup in zadrži'`,
         [plan, passed, user],
       );
     await assert.rejects(insert(null, true), /backtests_challenge_needs_plan/);

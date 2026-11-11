@@ -97,6 +97,19 @@ export function renderNewTest(container: HTMLElement, ref: Reference, onCreated:
       <p class="hint" id="range-hint"></p>
       <span class="error" data-error="period"></span>
 
+      <label for="timeframe">Časovni okvir svečk</label>
+      <select id="timeframe" name="timeframe">
+        <option value="1m">1 minuta (izvirni podatki)</option>
+        <option value="5m">5 minut</option>
+        <option value="15m">15 minut</option>
+        <option value="30m">30 minut</option>
+        <option value="1h">1 ura</option>
+        <option value="4h">4 ure</option>
+        <option value="1d">1 dan</option>
+      </select>
+      <p class="hint">Strategija dobi svečke izbranega okvira. Daljši okvir omogoča tudi dolga obdobja (minutnih svečk je lahko največ milijon, približno dve leti).</p>
+      <span class="error" data-error="timeframe"></span>
+
       <label for="venue">Borza</label>
       <select id="venue" name="venue_id"></select>
       <p class="hint" id="venue-info"></p>
@@ -104,8 +117,13 @@ export function renderNewTest(container: HTMLElement, ref: Reference, onCreated:
 
       <label for="prop-plan">Financiran račun (neobvezno)</label>
       <select id="prop-plan" name="prop_plan_id"></select>
-      <p class="hint" id="plan-info">Brez izbire se pravila ne preverjajo in test teče s kapitalom 10.000.</p>
+      <p class="hint" id="plan-info">Brez izbire se pravila ne preverjajo.</p>
       <span class="error" data-error="prop_plan_id"></span>
+
+      <label for="capital">Začetni kapital</label>
+      <input id="capital" name="initial_capital" type="number" min="100" max="1000000000" step="0.01" value="10000" inputmode="decimal">
+      <p class="hint" id="capital-info">Najmanj 100. Kapital se enakomerno razdeli med izbrana sredstva.</p>
+      <span class="error" data-error="initial_capital"></span>
 
       <fieldset class="params">
         <legend>Nastavitve strategije</legend>
@@ -169,6 +187,7 @@ export function renderNewTest(container: HTMLElement, ref: Reference, onCreated:
       chosen(strategy) || 'strategija ni izbrana',
       picked.length ? picked.join(', ') : 'sredstvo ni izbrano',
       from && to ? `${from} do ${to}` : 'obdobje ni izbrano',
+      chosen($<HTMLSelectElement>('#timeframe')),
       chosen(venue) || 'borza ni izbrana',
       chosen(planSelect) || 'brez financiranega računa',
     ];
@@ -226,13 +245,18 @@ export function renderNewTest(container: HTMLElement, ref: Reference, onCreated:
     const p = ref.propPlans.find((x) => x.id === plan.value);
     $('#plan-info').textContent = p
       ? `Račun ${amount(p.account_size)}, cilj dobička ${amount(p.profit_target)}, največja dnevna izguba ${amount(p.max_daily_loss)}, največja skupna izguba ${amount(p.max_total_loss)}. Test teče s kapitalom računa.`
-      : 'Brez izbire se pravila ne preverjajo in test teče s kapitalom 10.000.';
+      : 'Brez izbire se pravila ne preverjajo.';
+    // Z načrtom je kapital določen z velikostjo računa, sicer ga izbere uporabnik.
+    const capital = $<HTMLInputElement>('#capital');
+    capital.disabled = Boolean(p);
+    if (p) capital.value = String(p.account_size);
+    $('#capital-info').textContent = p ? 'Kapital določa izbrani financiran račun.' : 'Najmanj 100. Kapital se enakomerno razdeli med izbrana sredstva.';
   });
 
   venue.addEventListener('change', () => {
     const v = ref.venues.find((x) => x.id === venue.value);
     $('#venue-info').textContent = v
-      ? `Provizija maker ${percent(v.maker_pct)}, taker ${percent(v.taker_pct)}; razpon (spread): ${v.pay_spread ? 'se plača' : 'se ne plača'}`
+      ? `Provizija za pasivna naročila ${percent(v.maker_pct)}, za aktivna ${percent(v.taker_pct)}; razpon: ${v.pay_spread ? 'se plača' : 'se ne plača'}`
       : '';
   });
 
@@ -299,6 +323,8 @@ export function renderNewTest(container: HTMLElement, ref: Reference, onCreated:
         to: $<HTMLInputElement>('#to').value,
         params: collected.params,
         prop_plan_id: plan.value || undefined,
+        timeframe: $<HTMLSelectElement>('#timeframe').value,
+        initial_capital: $<HTMLInputElement>('#capital').value === '' ? undefined : Number($<HTMLInputElement>('#capital').value),
       });
       if (status === 201) onCreated((data as { id: number }).id);
       else if (status === 400 && data && typeof data === 'object' && 'errors' in data) showErrors(data.errors as Record<string, string>);

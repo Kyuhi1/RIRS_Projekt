@@ -5,13 +5,19 @@ import { checkChallenge, type ChallengeResult } from './propRules.ts';
 import { simulate, SimulationError, type SimulationResult, type SpreadLookup } from './simulation.ts';
 import { runStrategy, StrategyError } from './strategy.ts';
 
-// Začetni kapital testa (razdeli se enakomerno med izbrana sredstva).
+// Začetni kapital testa (razdeli se enakomerno med izbrana sredstva). Privzeto 10.000, uporabnik ga lahko izbere.
 export const INITIAL_CAPITAL = 10_000;
-const MAX_RUNTIME_MS = 60_000; // skupni čas strategij za vsa sredstva
+export const MIN_CAPITAL = 100;
+export const MAX_CAPITAL = 1_000_000_000;
+const MAX_RUNTIME_MS = 300_000; // skupni čas strategij za vsa sredstva (5 minut)
 const MAX_INSTRUMENTS = 30;
-// Največ svečk na sredstvo. Svečke se naložijo v pomnilnik in prenesejo v delavca; pri več milijonih
-// minutnih svečk bi backend zmanjkalo pomnilnika. 400.000 svečk je okoli 9 mesecev minutnih podatkov.
-export const MAX_BARS = 400_000;
+// Največ svečk na sredstvo (po združitvi v izbrani časovni okvir). Svečke se naložijo v pomnilnik in prenesejo v
+// delavca (1 GB). 1.000.000 minutnih svečk je okoli 1,9 leta podatkov; za daljša obdobja uporabnik izbere
+// daljši časovni okvir (npr. 1 ura: 1.000.000 svečk je več kot 100 let).
+export const MAX_BARS = 1_000_000;
+// Časovni okviri: izbrani okvir določa dolžino svečke, ki jo dobi strategija (podatki so minutni).
+export const TIMEFRAMES = { '1m': 60_000, '5m': 300_000, '15m': 900_000, '30m': 1_800_000, '1h': 3_600_000, '4h': 14_400_000, '1d': 86_400_000 } as const;
+export type Timeframe = keyof typeof TIMEFRAMES;
 const DAY_MS = 86_400_000;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -33,9 +39,11 @@ export interface ComputedBacktest {
   from: string; // YYYY-MM-DD
   to: string;
   params: Record<string, unknown>; // privzeti parametri strategije z vrednostmi, spremenjenimi za ta test
+  timeframe: Timeframe;
+  initialCapital: number; // z načrtom financiranega računa je to velikost računa
   propPlanId: string | null; // neobvezen načrt financiranega računa
   challengePassed: boolean | null; // izid preverjanja pravil; null brez načrta
-  results: SimulationResult & { challenge?: ChallengeResult }; // `challenge` samo, če je načrt izbran
+  results: SimulationResult & { timeframe: Timeframe; challenge?: ChallengeResult }; // `challenge` samo, če je načrt izbran
 }
 
 type Errors = Record<string, string>;
@@ -77,6 +85,15 @@ function parse(input: unknown) {
 
   if (body.params !== undefined && !isObject(body.params)) errors.params = 'Parametri morajo biti objekt JSON';
 
+  const rawCapital = body.initial_capital;
+  const capital = rawCapital === undefined || rawCapital === null || rawCapital === '' ? INITIAL_CAPITAL : typeof rawCapital === 'number' ? rawCapital : typeof rawCapital === 'string' && /^\d+(\.\d{1,2})?$/.test(rawCapital) ? Number(rawCapital) : NaN;
+  if (!Number.isFinite(capital) || capital < MIN_CAPITAL || capital > MAX_CAPITAL) {
+    errors.initial_capital = `Začetni kapital mora biti število med ${MIN_CAPITAL.toLocaleString('sl-SI')} in ${MAX_CAPITAL.toLocaleString('sl-SI')}`;
+  }
+
+  const rawTimeframe = body.timeframe === undefined || body.timeframe === null || body.timeframe === '' ? '1m' : body.timeframe;
+  if (typeof rawTimeframe !== 'string' || !Object.hasOwn(TIMEFRAMES, rawTimeframe)) errors.timeframe = `Časovni okvir mora biti eden od: ${Object.keys(TIMEFRAMES).join(', ')}`;
+
   // Načrt financiranega računa je neobvezen; prazna vrednost pomeni brez načrta.
   const rawPlan = body.prop_plan_id;
   const noPlan = rawPlan === undefined || rawPlan === null || rawPlan === '';
@@ -90,6 +107,8 @@ function parse(input: unknown) {
     from: body.from as string,
     to: body.to as string,
     params: isObject(body.params) ? body.params : {},
+    initialCapital: capital,
+    timeframe: rawTimeframe as Timeframe,
     propPlanId: noPlan || typeof rawPlan !== 'string' ? null : rawPlan,
   };
 }
@@ -122,7 +141,7 @@ export async function computeBacktest(
   const venue = (await pool.query('SELECT maker_pct, taker_pct, pay_spread FROM venues WHERE id = $1', [request.venueId])).rows[0];
   if (!venue) throw fail({ venue_id: 'Izbrana borza ne obstaja' });
 
-  // Z načrtom test teče s kapitalom financiranega računa (`account_size`), sicer z začetnim kapitalom testa.
+  // Z načrtom test teče s kapitalom financiranega računa (`account_size`), sicer s kapitalom, ki ga izbere uporabnik.
   let plan: PropPlanRow | undefined;
   if (request.propPlanId !== null) {
     plan = (await pool.query('SELECT account_size, profit_target, max_daily_loss, max_total_loss FROM prop_plans WHERE id = $1', [request.propPlanId])).rows[0];
@@ -145,11 +164,12 @@ export async function computeBacktest(
   if (lo > hi) throw fail({ period: 'Izbrana sredstva nimajo skupnega razpona podatkov' });
   if (request.from < lo || request.to > hi) throw fail({ period: `Obdobje mora biti v razponu podatkov: ${lo} do ${hi}` });
 
-  // Preveč svečk zavrnemo, še preden se naložijo v pomnilnik.
+  // Preveč svečk zavrnemo, še preden se naložijo v pomnilnik. Štejemo svečke izbranega časovnega okvira.
+  const intervalMs = TIMEFRAMES[request.timeframe];
   for (const ticker of request.instruments) {
-    const bars = await store.count(ticker, toMs(request.from), toMs(request.to) + DAY_MS);
+    const bars = await store.count(ticker, toMs(request.from), toMs(request.to) + DAY_MS, intervalMs);
     if (bars > maxBars) {
-      throw fail({ period: `Obdobje za ${ticker} vsebuje ${bars.toLocaleString('sl-SI')} svečk, dovoljenih je največ ${maxBars.toLocaleString('sl-SI')}. Izberite krajše obdobje.` });
+      throw fail({ period: `Obdobje za ${ticker} vsebuje ${bars.toLocaleString('sl-SI')} svečk, dovoljenih je največ ${maxBars.toLocaleString('sl-SI')}. Izberite krajše obdobje ali daljši časovni okvir.` });
     }
   }
 
@@ -162,7 +182,7 @@ export async function computeBacktest(
   const assets = [];
   try {
     for (const ticker of request.instruments) {
-      const bars = await store.candles(ticker, fromMs, endMs);
+      const bars = await store.candles(ticker, fromMs, endMs, intervalMs);
       if (bars.length === 0) throw fail({ period: `Za sredstvo ${ticker} ni podatkov v izbranem obdobju` });
       const remaining = deadlineMs - (Date.now() - startedAt);
       if (remaining <= 0) throw new StrategyError(`Strategija je presegla časovno omejitev (${deadlineMs / 1000} s)`);
@@ -176,8 +196,9 @@ export async function computeBacktest(
     }
     const spreadFor: SpreadLookup = (ticker, year) => spreads.get(`${ticker}:${year}`);
 
+    const initialCapital = plan ? plan.account_size : request.initialCapital;
     const results = simulate({
-      initialCapital: plan ? plan.account_size : INITIAL_CAPITAL,
+      initialCapital,
       from: fromMs,
       to: endMs - 1,
       assets,
@@ -197,9 +218,11 @@ export async function computeBacktest(
       from: request.from,
       to: request.to,
       params,
+      timeframe: request.timeframe,
+      initialCapital,
       propPlanId: plan ? request.propPlanId : null,
       challengePassed: challenge ? challenge.passed : null,
-      results: challenge ? { ...results, challenge } : results,
+      results: { ...results, timeframe: request.timeframe, ...(challenge ? { challenge } : {}) },
     };
   } catch (err) {
     if (err instanceof StrategyError) throw new BacktestError(422, { error: err.message });

@@ -95,7 +95,7 @@ test('obvezna polja, števila in ključ se preverijo (400 s polji)', async () =>
     assert.equal(put.status, 400);
     assert.ok((await json(put)).errors.id); // ključ se ne spreminja
     assert.equal((await send(base, 'PUT', '/api/admin/venues/gross', admin, { ...VENUE, maker_pct: -1 })).status, 400);
-    assert.equal((await pool.query("SELECT name FROM venues WHERE id = 'gross'")).rows[0].name, 'No costs (gross)');
+    assert.equal((await pool.query("SELECT name FROM venues WHERE id = 'gross'")).rows[0].name, 'Brez stroškov (bruto)');
   });
 });
 

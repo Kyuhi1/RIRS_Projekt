@@ -144,6 +144,7 @@ export async function retestBacktest(pool: Pool, store: CandleStore, user: User,
   if (!/^\d{1,15}$/.test(id)) return { status: 404, body: { error: 'Test ne obstaja' } };
   const { rows } = await pool.query(
     `SELECT b.id, b.status, b.strategy_id::int AS strategy_id, b.venue_id, b.params, b.prop_plan_id,
+            b.results -> 'initialCapital' AS initial_capital, b.results ->> 'timeframe' AS timeframe,
             to_char(b.period_from, 'YYYY-MM-DD') AS "from", to_char(b.period_to, 'YYYY-MM-DD') AS "to",
             ARRAY(SELECT ticker FROM backtest_instruments WHERE backtest_id = b.id ORDER BY ticker) AS instruments,
             EXISTS (SELECT 1 FROM backtests n WHERE n.previous_id = b.id) AS retested
@@ -162,6 +163,8 @@ export async function retestBacktest(pool: Pool, store: CandleStore, user: User,
     from: original.from,
     to: original.to,
     prop_plan_id: original.prop_plan_id,
+    initial_capital: original.initial_capital,
+    timeframe: original.timeframe ?? '1m',
   };
   try {
     return await createBacktest(pool, store, user, input, id);

@@ -14,7 +14,7 @@ interface TradesPage {
   trades: Trade[];
 }
 
-const SIDE_LABELS = { long: 'long', short: 'short' };
+const SIDE_LABELS = { long: 'dolga', short: 'kratka' };
 const money = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}`;
 const dateTime = (ms: number) => new Date(ms).toISOString().slice(0, 16).replace('T', ' ');
 

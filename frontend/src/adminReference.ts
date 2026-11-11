@@ -20,24 +20,24 @@ const yesNo = (value: boolean) => (value ? 'da' : 'ne');
 // Isti vzorec za borze, načrte in sredstva (WF-06): iskanje, »+ Dodaj«, tabela in panel za urejanje.
 export const REFERENCE_TABS: Record<'venues' | 'prop-plans' | 'instruments', { label: string; config: Config }> = {
   venues: {
-    label: 'Venues',
+    label: 'Borze',
     config: {
       path: 'venues', noun: 'borze', key: 'id', search: 'Išči po id-ju ali imenu',
       columns: [
-        { label: 'Id', value: (r) => r.id }, { label: 'Ime', value: (r) => r.name }, { label: 'Provizija maker', value: (r) => percent(r.maker_pct) },
-        { label: 'Provizija taker', value: (r) => percent(r.taker_pct) }, { label: 'Plača razpon', value: (r) => yesNo(r.pay_spread) },
+        { label: 'Id', value: (r) => r.id }, { label: 'Ime', value: (r) => r.name }, { label: 'Provizija (pasivna naročila)', value: (r) => percent(r.maker_pct) },
+        { label: 'Provizija (aktivna naročila)', value: (r) => percent(r.taker_pct) }, { label: 'Plača razpon', value: (r) => yesNo(r.pay_spread) },
       ],
       fields: [
         { name: 'id', label: 'Id', type: 'text', hint: 'Male črke, števke in vezaji; po ustvarjanju se ne spreminja.' },
         { name: 'name', label: 'Ime', type: 'text' },
-        { name: 'maker_pct', label: 'Provizija maker (delež vrednosti posla)', type: 'number', hint: 'Npr. 0.0005 pomeni 0,05 %.' },
-        { name: 'taker_pct', label: 'Provizija taker (delež vrednosti posla)', type: 'number' },
-        { name: 'pay_spread', label: 'Plača izmerjeni razpon (bid-ask)', type: 'checkbox' },
+        { name: 'maker_pct', label: 'Provizija za pasivna naročila (delež vrednosti posla)', type: 'number', hint: 'Npr. 0.0005 pomeni 0,05 %.' },
+        { name: 'taker_pct', label: 'Provizija za aktivna naročila (delež vrednosti posla)', type: 'number' },
+        { name: 'pay_spread', label: 'Plača izmerjeni razpon (razlika med nakupno in prodajno ceno)', type: 'checkbox' },
       ],
     },
   },
   'prop-plans': {
-    label: 'Prop plans',
+    label: 'Financirani računi',
     config: {
       path: 'prop-plans', noun: 'načrta', key: 'id', search: 'Išči po id-ju, podjetju ali načrtu',
       columns: [
@@ -56,7 +56,7 @@ export const REFERENCE_TABS: Record<'venues' | 'prop-plans' | 'instruments', { l
     },
   },
   instruments: {
-    label: 'Instruments',
+    label: 'Sredstva',
     config: {
       path: 'instruments', noun: 'sredstva', key: 'ticker', search: 'Išči po oznaki ali opisu',
       columns: [

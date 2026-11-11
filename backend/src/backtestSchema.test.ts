@@ -12,7 +12,7 @@ async function setup(pool: Pool) {
   await migrate(pool, MIGRATIONS);
   await addUser(pool, 'trader');
   const owner = (await pool.query('SELECT id FROM users')).rows[0].id as string;
-  const strategy = (await pool.query("SELECT id FROM strategies WHERE name = 'Buy & Hold'")).rows[0].id as string;
+  const strategy = (await pool.query("SELECT id FROM strategies WHERE name = 'Nakup in zadrži'")).rows[0].id as string;
   const insert = (extra = '', from = '2024-01-01', to = '2024-01-31') =>
     pool.query(
       `INSERT INTO backtests (owner_id, strategy_id, venue_id, period_from, period_to, results${extra ? ', status' : ''})
@@ -59,6 +59,6 @@ test('strategije, borze in sredstva, ki jih test uporablja, ni mogoče izbrisati
     await pool.query("INSERT INTO backtest_instruments VALUES ($1, 'BTCUSDT')", [id]);
     await assert.rejects(pool.query("DELETE FROM venues WHERE id = 'gross'"), /foreign key/);
     await assert.rejects(pool.query("DELETE FROM instruments WHERE ticker = 'BTCUSDT'"), /foreign key/);
-    await assert.rejects(pool.query("DELETE FROM strategies WHERE name = 'Buy & Hold'"), /foreign key/);
+    await assert.rejects(pool.query("DELETE FROM strategies WHERE name = 'Nakup in zadrži'"), /foreign key/);
   });
 });

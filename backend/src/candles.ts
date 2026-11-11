@@ -11,6 +11,8 @@ export interface Candle {
   volume: number;
 }
 
+export const BASE_INTERVAL_MS = 60_000; // podatki so minutne svečke
+
 export interface DataRange {
   from: string; // ISO čas prve svečke
   to: string; // ISO čas zadnje svečke
@@ -19,8 +21,10 @@ export interface DataRange {
 
 export interface CandleStore {
   range(ticker: string): Promise<DataRange | null>;
-  candles(ticker: string, fromMs: number, toMs: number): Promise<Candle[]>;
-  count(ticker: string, fromMs: number, toMs: number): Promise<number>; // število svečk v [fromMs, toMs), brez nalaganja
+  // `intervalMs` je dolžina svečke v ms: 60.000 (privzeto) vrne izvirne minutne svečke, večja vrednost jih združi
+  // v daljše svečke (open = prva, high = največ, low = najmanj, close = zadnja, volume = vsota), poravnane na UTC.
+  candles(ticker: string, fromMs: number, toMs: number, intervalMs?: number): Promise<Candle[]>;
+  count(ticker: string, fromMs: number, toMs: number, intervalMs?: number): Promise<number>; // število svečk v [fromMs, toMs), brez nalaganja
 }
 
 // Podatki so v <dataDir>/<TICKER>/*.parquet, npr. data/BTCUSDT/2024-01.parquet.
@@ -66,22 +70,30 @@ export function createCandleStore(dataDir: string): CandleStore {
       };
     },
 
-    async count(ticker, fromMs, toMs) {
+    async count(ticker, fromMs, toMs, intervalMs = BASE_INTERVAL_MS) {
       const files = await filesOf(ticker);
       if (!files) return 0;
-      const [row] = await query('SELECT count(*) AS n FROM read_parquet(?) WHERE open_time >= ? AND open_time < ?', [files, fromMs, toMs]);
+      const sql =
+        intervalMs === BASE_INTERVAL_MS
+          ? 'SELECT count(*) AS n FROM read_parquet(?) WHERE open_time >= ? AND open_time < ?'
+          : `SELECT count(DISTINCT open_time // ${intervalMs}) AS n FROM read_parquet(?) WHERE open_time >= ? AND open_time < ?`;
+      const [row] = await query(sql, [files, fromMs, toMs]);
       return Number(row.n);
     },
 
     // Svečke z open_time v [fromMs, toMs), urejene po času.
-    async candles(ticker, fromMs, toMs) {
+    async candles(ticker, fromMs, toMs, intervalMs = BASE_INTERVAL_MS) {
       const files = await filesOf(ticker);
       if (!files) return [];
-      const rows = await query(
-        `SELECT open_time, open, high, low, close, volume FROM read_parquet(?)
-         WHERE open_time >= ? AND open_time < ? ORDER BY open_time`,
-        [files, fromMs, toMs],
-      );
+      // Dolžina svečke je celo število iz našega seznama (ne iz zahtevka), zato jo smemo vstaviti v SQL.
+      const sql =
+        intervalMs === BASE_INTERVAL_MS
+          ? `SELECT open_time, open, high, low, close, volume FROM read_parquet(?)
+             WHERE open_time >= ? AND open_time < ? ORDER BY open_time`
+          : `SELECT (open_time // ${intervalMs}) * ${intervalMs} AS open_time, arg_min(open, open_time) AS open, max(high) AS high,
+                    min(low) AS low, arg_max(close, open_time) AS close, sum(volume) AS volume
+             FROM read_parquet(?) WHERE open_time >= ? AND open_time < ? GROUP BY 1 ORDER BY 1`;
+      const rows = await query(sql, [files, fromMs, toMs]);
       return rows.map((r) => ({
         time: Number(r.open_time),
         open: Number(r.open),

@@ -50,7 +50,7 @@ async function withCtx(fn: (ctx: Ctx) => Promise<void>): Promise<void> {
 }
 
 const request = async (ctx: Ctx, extra: Record<string, unknown> = {}) => ({
-  strategy_id: await ctx.strategyId('Buy & Hold'),
+  strategy_id: await ctx.strategyId('Nakup in zadrži'),
   instruments: ['BTCUSDT'],
   venue_id: 'gross',
   from: '2024-01-01',
@@ -66,7 +66,7 @@ const rejection = (promise: Promise<unknown>, status: number, check: (body: any)
     return true;
   });
 
-test('Buy & Hold čez celotno obdobje: rezultat se ujema z ročnim izračunom', async () => {
+test('Nakup in zadrži čez celotno obdobje: rezultat se ujema z ročnim izračunom', async () => {
   await withCtx(async (ctx) => {
     const r = await ctx.run(await request(ctx));
     // 10000 / 100 = 100 enot; izstop pri 100.5 + 4319 = 4419.5 => bruto (4419.5 - 100) * 100
@@ -90,11 +90,11 @@ test('krajše obdobje uporabi samo svečke v njem (»do« velja vključno)', asy
 
 test('parametri za test se združijo s privzetimi in ne spremenijo strategije', async () => {
   await withCtx(async (ctx) => {
-    const strategy_id = await ctx.strategyId('SMA Crossover');
-    const r = await ctx.run(await request(ctx, { strategy_id, params: { fast: 5 } }));
-    assert.deepEqual(r.params, { fast: 5, slow: 30 });
+    const strategy_id = await ctx.strategyId('Presek drsečih povprečij (SMA)');
+    const r = await ctx.run(await request(ctx, { strategy_id, params: { hitro_povprecje: 5 } }));
+    assert.deepEqual(r.params, { hitro_povprecje: 5, pocasno_povprecje: 30 });
     const row = (await ctx.pool.query('SELECT default_params FROM strategies WHERE id = $1', [strategy_id])).rows[0];
-    assert.deepEqual(row.default_params, { fast: 10, slow: 30 });
+    assert.deepEqual(row.default_params, { hitro_povprecje: 10, pocasno_povprecje: 30 });
   });
 });
 
@@ -198,7 +198,7 @@ test('obdobje z preveč svečkami je zavrnjeno, še preden se svečke naložijo,
   await withCtx(async (ctx) => {
     // 3 dni minutnih svečk = 4320; z omejitvijo 4319 test ne sme steči, z 4320 mora
     await rejection(ctx.run(await request(ctx), undefined, 4319), 400, (b) => {
-      assert.match(b.errors.period, /Obdobje za BTCUSDT vsebuje 4\.?320 svečk, dovoljenih je največ 4\.?319\. Izberite krajše obdobje\./);
+      assert.match(b.errors.period, /Obdobje za BTCUSDT vsebuje 4\.?320 svečk, dovoljenih je največ 4\.?319\. Izberite krajše obdobje ali daljši časovni okvir\./);
     });
     assert.equal((await ctx.run(await request(ctx), undefined, 4320)).results.tradeCount, 1);
 
@@ -304,4 +304,61 @@ test('neznan ali neveljaven načrt financiranega računa je zavrnjen z napako ob
       await rejection(ctx.run(await request(ctx, { prop_plan_id: bad })), 400, (b) => assert.equal(b.errors.prop_plan_id, 'Neveljaven načrt financiranega računa'));
     }
   });
+});
+
+test('začetni kapital izbere uporabnik: velikost posla in donosnost sledita kapitalu, napačne vrednosti so zavrnjene', async () => {
+  await withCtx(async (ctx) => {
+    const r = await ctx.run(await request(ctx, { initial_capital: 50_000 }));
+    // 50000 / 100 = 500 enot => bruto (4419.5 - 100) * 500; donosnost je enaka kot pri 10.000 (brez sestavljanja)
+    near(r.results.initialCapital, 50_000);
+    near(r.results.grossProfit, 2_159_750);
+    near(r.results.returnPct, (431_950 / INITIAL_CAPITAL) * 100);
+    assert.equal(r.initialCapital, 50_000);
+    assert.equal((await ctx.run(await request(ctx))).results.initialCapital, INITIAL_CAPITAL); // brez vrednosti: privzeto 10.000
+    assert.equal((await ctx.run(await request(ctx, { initial_capital: '2500.50' }))).results.initialCapital, 2500.5);
+
+    for (const bad of [0, 99.99, -5, 1e10, 'abc', NaN]) {
+      await rejection(ctx.run(await request(ctx, { initial_capital: bad })), 400, (b) => assert.match(b.errors.initial_capital, /Začetni kapital mora biti število med 100 in/));
+    }
+    // z načrtom financiranega računa velja velikost računa, vneseni kapital se prezre
+    const withPlan = await ctx.run(await request(ctx, { initial_capital: 50_000, prop_plan_id: 'ftmo-2step-100k' }));
+    assert.equal(withPlan.results.initialCapital, 100_000);
+  });
+});
+
+test('časovni okvir združi minutne svečke, omejitev števila svečk pa velja za izbrani okvir', async () => {
+  await withCtx(async (ctx) => {
+    const r = await ctx.run(await request(ctx, { timeframe: '1h' }));
+    assert.equal(r.timeframe, '1h');
+    assert.equal(r.results.timeframe, '1h');
+    near(r.results.grossProfit, 431_950); // prva svečka odpre pri 100, zadnja zapre pri 4419.5
+    assert.equal((await ctx.run(await request(ctx))).results.timeframe, '1m'); // privzeto minutne svečke
+
+    // 3 dni = 72 urnih svečk: omejitev 71 zavrne, 72 spusti; pri minutnih svečkah bi bilo 4320
+    await rejection(ctx.run(await request(ctx, { timeframe: '1h' }), undefined, 71), 400, (b) => assert.match(b.errors.period, /vsebuje 72 svečk, dovoljenih je največ 71\. Izberite krajše obdobje ali daljši časovni okvir\./));
+    assert.equal((await ctx.run(await request(ctx, { timeframe: '1h' }), undefined, 72)).results.tradeCount, 1);
+    assert.equal((await ctx.run(await request(ctx, { timeframe: '1d' }), undefined, 3)).results.tradeCount, 1);
+
+    await rejection(ctx.run(await request(ctx, { timeframe: '2h' })), 400, (b) => assert.match(b.errors.timeframe, /Časovni okvir mora biti eden od: 1m, 5m/));
+  });
+});
+
+test('združene svečke: open prve, high največja, low najmanjša, close zadnje, volume vsota', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'data-'));
+  try {
+    await writeTestParquet(dir, 'BTCUSDT', 'a.parquet', JAN1, 180); // 3 ure
+    const store = createCandleStore(dir);
+    const raw = await store.candles('BTCUSDT', JAN1, JAN1 + 180 * 60_000);
+    const hourly = await store.candles('BTCUSDT', JAN1, JAN1 + 180 * 60_000, 3_600_000);
+    assert.equal(hourly.length, 3);
+    assert.equal(await store.count('BTCUSDT', JAN1, JAN1 + 180 * 60_000, 3_600_000), 3);
+    const first = raw.slice(0, 60);
+    assert.deepEqual(hourly[0], {
+      time: JAN1, open: first[0]!.open, high: Math.max(...first.map((c) => c.high)), low: Math.min(...first.map((c) => c.low)),
+      close: first[59]!.close, volume: first.reduce((sum, c) => sum + c.volume, 0),
+    });
+    assert.equal(hourly[1]!.time, JAN1 + 3_600_000);
+  } finally {
+    await rm(dir, { recursive: true });
+  }
 });

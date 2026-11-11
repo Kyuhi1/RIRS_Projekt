@@ -7,12 +7,12 @@ export const DEMO_PASSWORD = 'Demo-geslo-123';
 export const DEMO_TRADER = { name: 'Demo Trgovec', email: 'demo.trader@example.com' };
 export const DEMO_MENTOR = { name: 'Demo Mentor', email: 'demo.mentor@example.com' };
 
-interface Reply {
+export interface Reply {
   status: number;
   data: any;
   cookie: string | null;
 }
-const call = async (base: string, method: string, path: string, cookie: string | null, body?: unknown): Promise<Reply> => {
+export const call = async (base: string, method: string, path: string, cookie: string | null, body?: unknown): Promise<Reply> => {
   const res = await fetch(base + path, {
     method,
     headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(cookie ? { Cookie: cookie } : {}) },
@@ -20,7 +20,7 @@ const call = async (base: string, method: string, path: string, cookie: string |
   });
   return { status: res.status, data: await res.json().catch(() => null), cookie: res.headers.get('set-cookie')?.split(';')[0] ?? null };
 };
-const must = (reply: Reply, expected: number[], what: string): Reply => {
+export const must = (reply: Reply, expected: number[], what: string): Reply => {
   if (!expected.includes(reply.status)) throw new Error(`${what}: strežnik je vrnil ${reply.status} ${JSON.stringify(reply.data)}`);
   return reply;
 };
@@ -67,11 +67,11 @@ export async function seedDemo(base: string, log: (message: string) => void = ()
   // Eno dejanje v delovnem procesu (trgovec ali mentor); `body` je telo zahtevka (npr. komentar).
   const act = async (who: string, id: number, action: string, body?: unknown) => must(await call(base, 'POST', `/api/backtests/${id}/${action}`, who, body), [200, 201], action);
   const plan: { state: string; strategy: string; days: number; prop?: string; steps: (id: number) => Promise<unknown> }[] = [
-    { state: 'draft', strategy: 'Buy & Hold', days: 2, steps: async () => undefined },
-    { state: 'submitted', strategy: 'SMA Crossover', days: 3, steps: (id) => act(trader, id, 'submit') },
-    { state: 'in_review', strategy: 'Breakout (Donchian)', days: 3, steps: async (id) => { await act(trader, id, 'submit'); await act(mentor, id, 'start-review'); } },
+    { state: 'draft', strategy: 'Nakup in zadrži', days: 2, steps: async () => undefined },
+    { state: 'submitted', strategy: 'Presek drsečih povprečij (SMA)', days: 3, steps: (id) => act(trader, id, 'submit') },
+    { state: 'in_review', strategy: 'Preboj (Donchian)', days: 3, steps: async (id) => { await act(trader, id, 'submit'); await act(mentor, id, 'start-review'); } },
     {
-      state: 'changes_requested', strategy: 'SMA Crossover', days: 2, prop: 'topstep-50k',
+      state: 'changes_requested', strategy: 'Presek drsečih povprečij (SMA)', days: 2, prop: 'topstep-50k',
       steps: async (id) => {
         await act(trader, id, 'submit');
         await act(mentor, id, 'start-review');
@@ -79,8 +79,8 @@ export async function seedDemo(base: string, log: (message: string) => void = ()
         await act(mentor, id, 'request-changes');
       },
     },
-    { state: 'approved', strategy: 'Buy & Hold', days: 3, prop: 'ftmo-2step-100k', steps: async (id) => { await act(trader, id, 'submit'); await act(mentor, id, 'start-review'); await act(mentor, id, 'approve'); } },
-    { state: 'withdrawn', strategy: 'Breakout (Donchian)', days: 2, steps: async (id) => { await act(trader, id, 'submit'); await act(trader, id, 'withdraw'); } },
+    { state: 'approved', strategy: 'Nakup in zadrži', days: 3, prop: 'ftmo-2step-100k', steps: async (id) => { await act(trader, id, 'submit'); await act(mentor, id, 'start-review'); await act(mentor, id, 'approve'); } },
+    { state: 'withdrawn', strategy: 'Preboj (Donchian)', days: 2, steps: async (id) => { await act(trader, id, 'submit'); await act(trader, id, 'withdraw'); } },
   ];
   for (const item of plan) {
     const to = addDays(from, item.days) > last ? last : addDays(from, item.days);

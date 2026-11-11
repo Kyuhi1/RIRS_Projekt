@@ -39,10 +39,10 @@ async function setup(base: string, pool: Pool) {
   };
   const idOf = async (email: string) => Number((await pool.query('SELECT id FROM users WHERE email = $1', [email])).rows[0].id);
   await pool.query("INSERT INTO mentor_links (mentor_id, trader_id, status) VALUES ($1, $2, 'active')", [await idOf('m1@example.com'), await idOf('t1@example.com')]);
-  const sma = Number((await pool.query("SELECT id FROM strategies WHERE name = 'SMA Crossover'")).rows[0].id);
+  const sma = Number((await pool.query("SELECT id FROM strategies WHERE name = 'Presek drsečih povprečij (SMA)'")).rows[0].id);
   const create = async (extra: Record<string, unknown> = {}) =>
     json(await send(base, 'POST', '/api/backtests', cookie.t1, {
-      strategy_id: sma, instruments: ['ETHUSDT', 'BTCUSDT'], venue_id: 'gross', from: '2024-01-01', to: '2024-01-03', params: { fast: 5 }, ...extra,
+      strategy_id: sma, instruments: ['ETHUSDT', 'BTCUSDT'], venue_id: 'gross', from: '2024-01-01', to: '2024-01-03', params: { hitro_povprecje: 5 }, ...extra,
     }));
   const setStatus = async (testId: number, status: string) => {
     await pool.query('UPDATE backtests SET status = $2, reviewer_id = $3 WHERE id = $1', [testId, status, status === 'draft' ? null : await idOf('m1@example.com')]);
@@ -62,7 +62,7 @@ test('ponovitev: nov osnutek z istimi nastavitvami in previous_id, prvotni test 
     assert.deepEqual([again.status, again.previous_id, again.next_id, again.reviewer, again.history], ['draft', original.id, null, null, []]);
     assert.deepEqual(
       [again.strategy_id, again.params, again.instruments, again.venue_id, again.from, again.to, again.prop_plan.id, again.visibility],
-      [sma, { fast: 5, slow: 30 }, ['BTCUSDT', 'ETHUSDT'], 'gross', '2024-01-01', '2024-01-03', 'topstep-50k', 'private'],
+      [sma, { hitro_povprecje: 5, pocasno_povprecje: 30 }, ['BTCUSDT', 'ETHUSDT'], 'gross', '2024-01-01', '2024-01-03', 'topstep-50k', 'private'],
     );
     assert.equal(again.results.initialCapital, 50000); // načrt financiranega računa velja tudi pri ponovitvi
     assert.equal(again.results.netProfit, original.results.netProfit); // enaki podatki in nastavitve dajo enak rezultat
@@ -71,6 +71,18 @@ test('ponovitev: nov osnutek z istimi nastavitvami in previous_id, prvotni test 
     const list = await json(await send(base, 'GET', '/api/backtests', cookie.t1));
     assert.deepEqual(list.map((t: any) => [t.id, t.previous_id, t.next_id]), [[again.id, original.id, null], [original.id, null, again.id]]);
     assert.equal(await count(pool), 2);
+  });
+});
+
+test('ponovitev prenese izbrani začetni kapital in časovni okvir', async () => {
+  await withData(async (base, pool) => {
+    const { cookie, create, setStatus } = await setup(base, pool);
+    const original = await create({ initial_capital: 25_000, timeframe: '1h' });
+    assert.deepEqual([original.results.initialCapital, original.results.timeframe], [25_000, '1h']);
+    await setStatus(original.id, 'changes_requested');
+    const again = await json(await send(base, 'POST', `/api/backtests/${original.id}/retest`, cookie.t1));
+    assert.deepEqual([again.results.initialCapital, again.results.timeframe], [25_000, '1h']);
+    assert.equal(again.results.netProfit, original.results.netProfit);
   });
 });
 
@@ -135,7 +147,7 @@ test('ponovitev, ki je ni mogoče izračunati, ne ustvari testa in ne zaklene pr
     // Prvotni test brez podatkov na disku (privzeta mapa ne obstaja), zato ponovni izračun ne uspe.
     const row = await pool.query(
       `INSERT INTO backtests (owner_id, strategy_id, venue_id, period_from, period_to, params, results, status)
-       VALUES ((SELECT id FROM users WHERE email = 't1@example.com'), $1, 'gross', '2024-01-01', '2024-01-03', '{"fast": 5, "slow": 30}', '{"trades": []}', 'draft') RETURNING id`, [sma]);
+       VALUES ((SELECT id FROM users WHERE email = 't1@example.com'), $1, 'gross', '2024-01-01', '2024-01-03', '{"hitro_povprecje": 5, "pocasno_povprecje": 30}', '{"trades": []}', 'draft') RETURNING id`, [sma]);
     const id = Number(row.rows[0].id);
     await pool.query("INSERT INTO backtest_instruments (backtest_id, ticker) VALUES ($1, 'BTCUSDT')", [id]);
     await setStatus(id, 'changes_requested');

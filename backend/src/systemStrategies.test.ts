@@ -21,7 +21,7 @@ test('sistemske strategije nimajo lastnika, so deljene in se ob ponovnem zagonu 
   await withTestDb(async (pool) => {
     await migrate(pool, MIGRATIONS);
     const rows = (await pool.query('SELECT owner_id, visibility, name FROM strategies ORDER BY id')).rows;
-    assert.deepEqual(rows.map((r) => r.name), ['Buy & Hold', 'SMA Crossover', 'Breakout (Donchian)']);
+    assert.deepEqual(rows.map((r) => r.name), ['Nakup in zadrži', 'Presek drsečih povprečij (SMA)', 'Preboj (Donchian)']);
     assert.ok(rows.every((r) => r.owner_id === null && r.visibility === 'shared'));
 
     assert.deepEqual(await migrate(pool, MIGRATIONS), []);
@@ -57,10 +57,10 @@ test('vsaka sistemska strategija se izvede v workerju in vrne veljavne posle za 
   });
 });
 
-test('Buy & Hold: en long posel od prve do zadnje svečke', async () => {
+test('Nakup in zadrži: en long posel od prve do zadnje svečke', async () => {
   await withTestDb(async (pool) => {
     await migrate(pool, MIGRATIONS);
-    const { source } = (await pool.query("SELECT source FROM strategies WHERE name = 'Buy & Hold'")).rows[0];
+    const { source } = (await pool.query("SELECT source FROM strategies WHERE name = 'Nakup in zadrži'")).rows[0];
     const trades = await runStrategy(source, BARS, {});
     assert.deepEqual(trades, [
       { side: 'long', entryTime: BARS[0]!.time, exitTime: BARS.at(-1)!.time, entryPrice: BARS[0]!.open, exitPrice: BARS.at(-1)!.close, orderType: 'taker' },
@@ -71,7 +71,7 @@ test('Buy & Hold: en long posel od prve do zadnje svečke', async () => {
 test('neveljavni parametri dajo razumljivo napako strategije', async () => {
   await withTestDb(async (pool) => {
     await migrate(pool, MIGRATIONS);
-    const { source } = (await pool.query("SELECT source FROM strategies WHERE name = 'SMA Crossover'")).rows[0];
-    await assert.rejects(runStrategy(source, BARS, { fast: 30, slow: 10 }), /slow mora biti večji od fast/);
+    const { source } = (await pool.query("SELECT source FROM strategies WHERE name = 'Presek drsečih povprečij (SMA)'")).rows[0];
+    await assert.rejects(runStrategy(source, BARS, { hitro_povprecje: 30, pocasno_povprecje: 10 }), /pocasno_povprecje mora biti večji od hitro_povprecje/);
   });
 });
