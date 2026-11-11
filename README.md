@@ -435,6 +435,13 @@ Ko mentor zahteva spremembe (`changes_requested`), trgovec iz testa naredi ponov
 - Brisanje zapisa, ki ga uporablja vsaj en test, vrne `409` s `tests` (število testov); sredstvu se ob brisanju izbrišejo tudi razponi (`spreads`), podatki Parquet ostanejo na disku.
 - Sprememba borze ali načrta ne spremeni že shranjenih rezultatov (P8): rezultat hrani vse zneske in izid preverjanja sam; ponovitev testa uporabi trenutne vrednosti.
 
+### Upravljanje uporabnikov (API)
+
+- Samo administrator: `GET /api/admin/users?q=&page=` (iskanje po imenu ali e-naslovu, po 20 na stran; odgovor `{page, pageSize, total, pages, items}` brez gesel), `POST /api/admin/users` (ime, e-naslov, geslo, vloga `trader`, `mentor` ali `admin`) in `PATCH /api/admin/users/:id` (`name`, `role`, `blocked`).
+- Blokiran uporabnik se ne more prijaviti (`403`), obstoječ žeton pa neha veljati že pri naslednjem zahtevku (`401`), ker se uporabnik ob vsakem zahtevku prebere iz baze. Enako velja za vlogo: nova vloga velja od naslednjega zahtevka.
+- Zaščite (`409` z razlogom): administrator ne more blokirati samega sebe, zadnjemu aktivnemu administratorju se vloga ne odvzame in ga ni mogoče blokirati. Administratorji se pri tem zaklenejo v stalnem vrstnem redu, zato dva sočasna odvzema ne moreta oba uspeti.
+- Administrator ne vidi zasebnih strategij (`404`) in nima dostopa do testov (`403`).
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:

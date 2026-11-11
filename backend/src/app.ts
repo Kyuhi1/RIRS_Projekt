@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { login, logout, register, type Result, type User } from './auth.ts';
 import { approveBacktest, requestChanges, startReview, submitBacktest, withdrawBacktest } from './backtestReview.ts';
 import { addComment, listComments } from './comments.ts';
+import { createAccount, listUsers, updateUser } from './adminUsers.ts';
 import { createReference, deleteReference, ENTITY_NAMES, listReference, updateReference, type EntityName } from './adminReference.ts';
 import { studentAnalytics } from './mentorAnalytics.ts';
 import { listReviewQueue, listStudents } from './mentorReview.ts';
@@ -179,8 +180,13 @@ const routes: Record<string, Record<string, Route>> = {
     }],
   ])),
   '/api/admin/users': {
-    GET: guarded(['admin'], select('SELECT id, email, name, role, blocked, created_at FROM users ORDER BY id')),
+    GET: guarded(['admin'], async ({ pool }, req) => {
+      const query = new URL(req.url ?? '/', 'http://localhost').searchParams;
+      return listUsers(pool, query.get('q'), query.get('page'));
+    }),
+    POST: guarded(['admin'], async ({ pool }, req) => createAccount(pool, await readJson(req))),
   },
+  '/api/admin/users/:id': { PATCH: guarded(['admin'], async ({ pool, user, params }, req) => updateUser(pool, user!, params.id!, await readJson(req))) },
 };
 
 // Poti z deli (:id) pretvorimo v regularne izraze; pot -> metode.

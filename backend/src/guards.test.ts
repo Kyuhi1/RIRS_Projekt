@@ -26,7 +26,7 @@ test('vloge: trgovec in mentor dobita 403 na admin poti, admin jo vidi; skupne p
       const users = await fetch(`${base}/api/admin/users`, { headers });
       if (role === 'admin') {
         assert.equal(users.status, 200);
-        const list = (await users.json()) as Record<string, unknown>[];
+        const list = ((await users.json()) as { items: Record<string, unknown>[] }).items;
         assert.equal(list.length, 3);
         assert.ok(list.every((u) => !('password_hash' in u)));
       } else {
