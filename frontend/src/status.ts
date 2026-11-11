@@ -9,3 +9,6 @@ export const STATUS_LABELS: Record<string, string> = {
 };
 
 export const statusLabel = (status: string): string => STATUS_LABELS[status] ?? status;
+
+// Datum in ura v krajevni obliki, »–« brez vrednosti.
+export const when = (iso: string | null): string => (iso ? new Date(iso).toLocaleString('sl-SI', { dateStyle: 'short', timeStyle: 'short' }) : '–');

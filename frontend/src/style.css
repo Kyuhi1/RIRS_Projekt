@@ -77,3 +77,17 @@ button:disabled { cursor: not-allowed; }
 .pager { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.75rem; }
 .pager button { margin-top: 0; }
 .pager .hint { margin: 0; }
+
+.readonly-note { margin: 0 0 1rem; padding: 0.4rem 0.75rem; border: 1px solid #ccc; border-radius: 6px; background: #f6f6f6; font-size: 0.85rem; }
+.review-layout { grid-template-columns: 1.6fr 1fr; }
+@media (max-width: 800px) { .review-layout { grid-template-columns: 1fr; } }
+.comment { margin: 0.5rem 0; padding: 0.4rem 0.6rem; border-left: 3px solid #ccc; background: #fafafa; }
+.comment.mistake { border-left-color: #c0392b; background: #fdf2f1; }
+.comment .hint { margin: 0; }
+.comment-body { margin: 0.2rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mistake-badge { border-color: #c0392b; background: #c0392b; color: #fff; }
+.mistake-title { color: #c0392b; }
+.comment-group h4 { margin: 0.75rem 0 0.25rem; font-size: 0.9rem; }
+textarea { width: 100%; box-sizing: border-box; font: inherit; }
+label.inline { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
+label.inline input { width: auto; margin: 0; }

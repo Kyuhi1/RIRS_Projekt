@@ -303,6 +303,8 @@ Frontend:
 - **Stran Mentor trgovca** (`#mentor`): trenutni mentor z gumbom »Prekini povezavo« (s potrditvijo) in čakajoča vabila z imenom mentorja ter gumboma »Sprejmi« in »Zavrni«. Če trgovec že ima aktivnega mentorja, je ob sprejemu drugega vabila prikazano »Že imate aktivnega mentorja«.
 - Po vsakem dejanju se stran osveži; če se je stanje povezave medtem spremenilo (`404`, `409`), je prikazan razlog, vsebina pa se po kratkem času osveži.
 - **Mentorjev pogled testa** (`#pregled/<id>`): ista stran rezultatov kot pri trgovcu, samo za branje. Razdelek »Mentorski pregled« kaže učenca in zgodovino stanj, pri oddanem testu gumb »Začni pregled«. Stran ni v navigaciji; test, ki ga mentor ne vidi (osnutek, tuj učenec, prekinjena povezava), prikaže »Test ne obstaja«.
+- **Zaslon mentorjevega pregleda** (`#pregled/<id>`, wireframe WF-05): oznaka »Samo za branje«, štiri metrike (neto dobiček, donosnost, največji padec, delež dobičkonosnih), krivulja, blok »Nastavitve (zaklenjeno)« s parametri in stroški ter posli. Desno so »Komentarji«, »Odločitev in zgodovina stanj«. Zabeležene napake so izpisane ločeno nad običajnimi komentarji, z rdečo oznako »Napaka«. Obrazec za komentar (z »Označi kot napako«) je viden samo med pregledom; »Zahtevaj spremembe« je onemogočen, dokler ni vsaj enega komentarja, »Zahtevaj spremembe« in »Odobri« zahtevata potrditev. Po odločitvi so komentarji zaklenjeni.
+- **Trgovec** na strani rezultatov (`#backtests/<id>`) za oddan test vidi razdelek »Komentarji mentorja« samo za branje, napake z rdečo oznako.
 
 ## Oddaja testa v mentorski pregled
 
