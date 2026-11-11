@@ -91,3 +91,4 @@ button:disabled { cursor: not-allowed; }
 textarea { width: 100%; box-sizing: border-box; font: inherit; }
 label.inline { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
 label.inline input { width: auto; margin: 0; }
+.result-head a { font-size: 0.85rem; }
