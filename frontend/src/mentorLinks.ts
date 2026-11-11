@@ -1,5 +1,6 @@
 import { errorMessage, getJson, postJson } from './api';
 import { renderReviewQueue } from './reviewQueue';
+import { renderStudentAnalytics } from './studentAnalytics';
 
 interface Link {
   id: number;
@@ -149,7 +150,7 @@ export async function renderMentorDashboard(container: HTMLElement, onUnauthoriz
   const queue = panel('Zagoni za pregled');
   renderReviewQueue(queue, onUnauthorized);
   const analytics = panel('Skupna analitika učencev');
-  analytics.append(make('p', 'hint', 'Ta del bo na voljo v naslednjih korakih razvoja.'));
+  renderStudentAnalytics(analytics, onUnauthorized);
   right.append(queue, analytics);
 }
 

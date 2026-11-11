@@ -416,6 +416,17 @@ Ko mentor zahteva spremembe (`changes_requested`), trgovec iz testa naredi ponov
 - Stran `#backtests/primerjava/<id,id,...>`: tabela (strategija, parametri, sredstva, borza, obdobje, avtor, neto dobiček, donosnost, število poslov, delež zmag, največji padec, preverjanje računa) z oznako ★ pri najboljši vrednosti (največ pri dobičku, donosnosti, številu poslov in deležu zmag; najmanj pri padcu; pri enakih vrednostih brez oznake) in skupen graf krivulj z legendo.
 - Graf prikazuje donosnost v % glede na začetni kapital posameznega testa na skupni časovni osi, ker imajo testi lahko različen kapital in obdobje. Barve se razlikujejo tudi po vzorcu črte.
 
+### Analitika učencev (API)
+
+- `GET /api/mentor/students/analytics?period=all|30|90` (samo mentor, privzeto `all`; drugo je `400`): aktivni učenci mentorja z `tests`, `approved`, `approvedPct`, `mistakes` (komentarji z `is_mistake`) in `avgMaxDrawdownPct`, poleg tega `total` (vsote) in `average`.
+- Šteje samo testi, ki jih mentor sme videti (oddani in naprej, njegov pregled, aktivna povezava), torej brez osnutkov in umaknjenih. Obdobje se presoja po času zadnje oddaje testa.
+- `average`: testi in napake na učenca, delež odobrenih in največji padec pa so združeni čez vse teste (ne povprečje povprečij). Učenec brez testov ima `approvedPct` in `avgMaxDrawdownPct` enaka `null`; brez učencev je `average` enak `null`.
+
+### Analitika učencev (frontend)
+
+- Na mentorjevem dashboardu (panel »Skupna analitika učencev«): izbira obdobja (Zadnjih 30 dni, Zadnjih 90 dni, Vse; privzeto Vse), štiri skupne metrike (testi, odobreni, napake, povprečni največji padec) s povprečjem na učenca in tabela učencev.
+- Prazna stanja: brez aktivnih učencev »Ni aktivnih učencev …«, brez testov v obdobju »… še nimajo testov za analizo«; učenec brez testov ima namesto deleža in padca »–«, ne 0.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:
