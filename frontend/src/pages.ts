@@ -25,6 +25,7 @@ export function renderPage(container: HTMLElement, page: string, onUnauthorized:
   if (page === 'backtests') return void renderBacktests(container, arg, onUnauthorized).catch(() => showError(container));
   if (page === 'pregled') return void renderResult(container, arg ?? '', onUnauthorized, 'mentor').catch(() => showError(container));
   if (page === 'dashboard') return void renderMentorDashboard(container, onUnauthorized).catch(() => showError(container));
+  if (page === 'ucenci' || page === 'analitika') return void renderMentorDashboard(container, onUnauthorized, page).catch(() => showError(container));
   if (page === 'mentor') return void renderTraderMentor(container, onUnauthorized).catch(() => showError(container));
   if (page === 'strategije') return void renderStrategies(container, arg, onUnauthorized).catch(() => showError(container));
   if (page === 'administracija') return renderAdmin(container, onUnauthorized);

@@ -75,14 +75,26 @@ async function act(id: number, action: 'accept' | 'decline' | 'end', message: HT
   }
 }
 
-// Mentorjev dashboard (WF-04): levo Učenci in Povabi učenca, desno prostor za preglede in analitiko, ki sledita.
-export async function renderMentorDashboard(container: HTMLElement, onUnauthorized: () => void): Promise<void> {
-  const reload = () => void renderMentorDashboard(container, onUnauthorized);
-  container.innerHTML = '<h2>Dashboard</h2><div class="skeleton" role="status" aria-label="Nalagam"><span></span><span></span><span></span><span></span></div>';
+export type MentorView = 'dashboard' | 'ucenci' | 'analitika';
+const MENTOR_TITLES: Record<MentorView, string> = { dashboard: 'Dashboard', ucenci: 'Učenci', analitika: 'Analitika' };
+
+// Mentorjev dashboard (WF-04): levo Učenci in Povabi učenca, desno zagoni za pregled in analitika.
+// Strani »Učenci« in »Analitika« v navigaciji prikažeta isti vsebini vsako zase.
+export async function renderMentorDashboard(container: HTMLElement, onUnauthorized: () => void, view: MentorView = 'dashboard'): Promise<void> {
+  const reload = () => void renderMentorDashboard(container, onUnauthorized, view);
+  if (view === 'analitika') {
+    container.innerHTML = '<h2>Analitika</h2>';
+    const analyticsPage = panel('Skupna analitika učencev');
+    container.append(analyticsPage);
+    renderStudentAnalytics(analyticsPage, onUnauthorized);
+    return;
+  }
+  const title = MENTOR_TITLES[view];
+  container.innerHTML = `<h2>${title}</h2><div class="skeleton" role="status" aria-label="Nalagam"><span></span><span></span><span></span><span></span></div>`;
   const [loaded, counts] = await Promise.all([loadLinks(), getJson('/api/mentor/students')]);
   if (!loaded || counts.status === 401) return onUnauthorized();
   const countOf = new Map((counts.status === 200 ? (counts.data as Student[]) : []).map((s) => [s.id, s]));
-  container.innerHTML = '<h2>Dashboard</h2><div class="split"><div id="left"></div><div id="right"></div></div>';
+  container.innerHTML = `<h2>${title}</h2><div class="split"><div id="left"></div><div id="right"></div></div>`;
   const left = container.querySelector<HTMLElement>('#left')!;
   const right = container.querySelector<HTMLElement>('#right')!;
 
@@ -146,6 +158,11 @@ export async function renderMentorDashboard(container: HTMLElement, onUnauthoriz
     }
   });
   inviteBox.append(form);
+  if (view === 'ucenci') {
+    left.append(students);
+    right.append(inviteBox);
+    return;
+  }
   left.append(students, inviteBox);
 
   const queue = panel('Zagoni za pregled');
