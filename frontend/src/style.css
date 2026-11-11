@@ -92,3 +92,16 @@ textarea { width: 100%; box-sizing: border-box; font: inherit; }
 label.inline { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
 label.inline input { width: auto; margin: 0; }
 .result-head a { font-size: 0.85rem; }
+
+/* Primerjava testov (US-09) */
+table.compare { table-layout: fixed; }
+table.compare th[scope='row'] { width: 11rem; text-align: left; }
+table.compare td.best { background: #e6f4ea; font-weight: 600; }
+.compare-line { fill: none; stroke-width: 2; }
+.swatch { display: inline-block; width: 1.5rem; border-top: 3px solid #000; margin-right: 0.4rem; vertical-align: middle; }
+.legend { list-style: none; display: flex; flex-wrap: wrap; gap: 0.4rem 1.2rem; padding: 0; margin: 0.5rem 0 0; font-size: 0.85rem; }
+.compare-bar { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem; }
+.compare-bar .hint { margin: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+table.compare td { overflow-wrap: anywhere; }
+table.compare code { word-break: break-all; }

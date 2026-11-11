@@ -1,4 +1,5 @@
 import { errorMessage, getJson } from './api';
+import { COMPARE_MAX, COMPARE_MIN } from './compare';
 import { statusLabel } from './status';
 import { VISIBILITY_LABELS } from './ui';
 import { ASSET_CLASS_LABELS, type Instrument, type Reference } from './refdata';
@@ -28,8 +29,25 @@ export async function renderRuns(container: HTMLElement, ref: Reference, onUnaut
     <h2>Seznam zagonov</h2>
     <div class="presets" id="run-scope" role="group" aria-label="Čigavi zagoni"></div>
     <div class="presets" id="run-filters" role="group" aria-label="Filter po skupini sredstev"></div>
-    <div id="runs-table"><p>Nalagam ...</p></div>`;
+    <div id="runs-table"><p>Nalagam ...</p></div>
+    <div class="compare-bar" id="compare-bar"><button type="button" id="compare-go">Primerjaj</button><p class="hint" id="compare-hint"></p></div>`;
   const table = container.querySelector<HTMLElement>('#runs-table')!;
+
+  // Izbira za primerjavo (US-09) velja za oba seznama in ostane ob menjavi zavihka ali filtra.
+  const selected = new Set<number>();
+  const compareGo = container.querySelector<HTMLButtonElement>('#compare-go')!;
+  const compareHint = container.querySelector<HTMLElement>('#compare-hint')!;
+  const drawCompare = () => {
+    const n = selected.size;
+    const valid = n >= COMPARE_MIN && n <= COMPARE_MAX;
+    compareGo.disabled = !valid;
+    compareHint.textContent = valid
+      ? `Izbrano: ${n}`
+      : n < COMPARE_MIN ? `Za primerjavo izberite od ${COMPARE_MIN} do ${COMPARE_MAX} testov (izbrano: ${n}).` : `Izbrali ste preveč testov (${n}); največ je ${COMPARE_MAX}.`;
+  };
+  compareGo.addEventListener('click', () => {
+    if (selected.size >= COMPARE_MIN && selected.size <= COMPARE_MAX) location.hash = `backtests/primerjava/${[...selected].join(',')}`;
+  });
 
   let scope: 'mine' | 'shared' = 'mine';
   const scopeBar = container.querySelector<HTMLElement>('#run-scope')!;
@@ -53,6 +71,7 @@ export async function renderRuns(container: HTMLElement, ref: Reference, onUnaut
   let runs: Run[] = [];
   const load = async (): Promise<void> => {
     drawScope();
+    drawCompare();
     table.innerHTML = '<p>Nalagam ...</p>';
     const { status, data } = await getJson(`/api/backtests?scope=${scope}`);
     if (status === 401) return onUnauthorized();
@@ -100,12 +119,25 @@ export async function renderRuns(container: HTMLElement, ref: Reference, onUnaut
       return;
     }
     table.innerHTML = scope === 'shared'
-      ? '<table><thead><tr><th>Zagon</th><th>Obdobje</th><th>Rezultat</th><th>Avtor</th></tr></thead><tbody></tbody></table>'
-      : '<table><thead><tr><th>Zagon</th><th>Obdobje</th><th>Rezultat</th><th>Stanje</th><th>Vidnost</th></tr></thead><tbody></tbody></table>';
+      ? '<table><thead><tr><th><span class="sr-only">Primerjava</span></th><th>Zagon</th><th>Obdobje</th><th>Rezultat</th><th>Avtor</th></tr></thead><tbody></tbody></table>'
+      : '<table><thead><tr><th><span class="sr-only">Primerjava</span></th><th>Zagon</th><th>Obdobje</th><th>Rezultat</th><th>Stanje</th><th>Vidnost</th></tr></thead><tbody></tbody></table>';
     const body = table.querySelector('tbody')!;
     for (const run of shown) {
       const row = document.createElement('tr');
       row.className = 'clickable';
+      const pick = document.createElement('td');
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = selected.has(run.id);
+      box.setAttribute('aria-label', `Izberi zagon #${run.id} za primerjavo`);
+      box.addEventListener('click', (event) => event.stopPropagation());
+      box.addEventListener('change', () => {
+        if (box.checked) selected.add(run.id);
+        else selected.delete(run.id);
+        drawCompare();
+      });
+      pick.addEventListener('click', (event) => event.stopPropagation());
+      pick.append(box);
       const name = document.createElement('td');
       const link = document.createElement('a');
       link.href = `#backtests/${run.id}`;
@@ -133,8 +165,8 @@ export async function renderRuns(container: HTMLElement, ref: Reference, onUnaut
       if (scope === 'shared') {
         const author = document.createElement('td');
         author.textContent = run.owner.name;
-        row.append(name, period, result, author);
-      } else row.append(name, period, result, state, visibility);
+        row.append(pick, name, period, result, author);
+      } else row.append(pick, name, period, result, state, visibility);
       row.addEventListener('click', () => (location.hash = `backtests/${run.id}`));
       body.append(row);
     }

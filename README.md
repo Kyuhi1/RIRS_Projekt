@@ -410,6 +410,12 @@ Ko mentor zahteva spremembe (`changes_requested`), trgovec iz testa naredi ponov
 - `GET /api/backtests/compare?ids=3,7,9` (samo trgovec): primerjava 2–4 testov v vrstnem redu iz `ids`. Za vsak test vrne strategijo, parametre, sredstva, borzo, obdobje, načrt financiranega računa z izidom (`challenge_passed`), avtorja in `results` z `netProfit`, `returnPct`, `tradeCount`, `winRatePct`, `maxDrawdownPct`, `initialCapital` ter `equityCurve` (brez poslov).
 - `400`, če ni od 2 do 4 id-jev, so podvojeni ali neveljavni; `404` za celoto, če je kateri test neobstoječ ali ga trgovec ne sme brati (P1: odgovor ne razkrije, kateri tuji testi obstajajo). Primerljivi so lastni testi in testi, ki jih je drug trgovec delil; pri tujih ni mentorja.
 
+### Primerjava testov (frontend)
+
+- Na seznamu zagonov ima vsaka vrstica potrditveno polje (v »Moji« in »Deljeni zagoni«; izbira ostane ob menjavi zavihka ali filtra). Gumb **Primerjaj** je aktiven pri 2–4 izbranih testih, sicer je onemogočen s pojasnilom.
+- Stran `#backtests/primerjava/<id,id,...>`: tabela (strategija, parametri, sredstva, borza, obdobje, avtor, neto dobiček, donosnost, število poslov, delež zmag, največji padec, preverjanje računa) z oznako ★ pri najboljši vrednosti (največ pri dobičku, donosnosti, številu poslov in deležu zmag; najmanj pri padcu; pri enakih vrednostih brez oznake) in skupen graf krivulj z legendo.
+- Graf prikazuje donosnost v % glede na začetni kapital posameznega testa na skupni časovni osi, ker imajo testi lahko različen kapital in obdobje. Barve se razlikujejo tudi po vzorcu črte.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:
