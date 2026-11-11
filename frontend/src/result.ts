@@ -1,6 +1,7 @@
 import { errorMessage, getJson } from './api';
 import { renderEquityChart, type EquityPoint, type Marker } from './equityChart';
 import { renderReview, type HistoryEntry } from './review';
+import type { Role } from './session';
 import { statusLabel } from './status';
 import { renderTrades } from './trades';
 
@@ -35,6 +36,7 @@ interface BacktestDetail {
   status: string;
   visibility: 'private' | 'shared';
   reviewer: { id: number; name: string } | null;
+  owner: { id: number; name: string };
   history: HistoryEntry[];
   results: {
     initialCapital: number;
@@ -107,15 +109,15 @@ function rulesSection(challenge: Challenge): HTMLElement {
 }
 
 // Stran rezultatov testa (WF-03): glava z nastavitvami, metrike, krivulja, stroški, pravila in posli.
-export async function renderResult(container: HTMLElement, id: string, onUnauthorized: () => void): Promise<void> {
+export async function renderResult(container: HTMLElement, id: string, onUnauthorized: () => void, role: Role = 'trader'): Promise<void> {
   container.innerHTML = '<p>Nalagam ...</p>';
   const [detail, venues] = await Promise.all([getJson(`/api/backtests/${encodeURIComponent(id)}`), getJson('/api/venues')]);
   if (detail.status === 401 || venues.status === 401) return onUnauthorized();
 
   container.replaceChildren();
   const back = make('p');
-  const link = make('a', undefined, '← Nazaj na Backtests');
-  link.href = '#backtests';
+  const link = make('a', undefined, role === 'mentor' ? '← Nazaj na Dashboard' : '← Nazaj na Backtests');
+  link.href = role === 'mentor' ? '#dashboard' : '#backtests';
   back.append(link);
   container.append(back);
   if (detail.status !== 200) {
@@ -183,7 +185,7 @@ export async function renderResult(container: HTMLElement, id: string, onUnautho
   const review = section('Mentorski pregled', reviewBox);
   container.append(header, metrics, review, settings, chart, cards, trades);
   await Promise.all([
-    renderReview(reviewBox, t, () => void renderResult(container, id, onUnauthorized), onUnauthorized),
+    renderReview(reviewBox, t, () => void renderResult(container, id, onUnauthorized, role), onUnauthorized, role),
     renderTrades(tradesBox, t.id, onUnauthorized),
   ]);
 }

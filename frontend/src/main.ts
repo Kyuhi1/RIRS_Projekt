@@ -10,6 +10,8 @@ const NAV: Record<Role, string[]> = {
   mentor: ['dashboard', 'ucenci', 'analitika'],
   admin: ['administracija'],
 };
+// Strani, ki niso v navigaciji: mentor odpre test učenca na »pregled/<id>«.
+const HIDDEN_PAGES: Record<Role, string[]> = { trader: [], mentor: ['pregled'], admin: [] };
 const PUBLIC_PAGES = ['prijava', 'registracija'];
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -32,7 +34,7 @@ function expireSession(): void {
 
 function renderHeader(current: User, page: string): string {
   const links = NAV[current.role]
-    .map((p) => `<a href="#${p}"${p === page ? ' class="active" aria-current="page"' : ''}>${PAGE_TITLES[p]}</a>`)
+    .map((p) => `<a href="#${p}"${p === (page === 'pregled' ? 'dashboard' : page) ? ' class="active" aria-current="page"' : ''}>${PAGE_TITLES[p]}</a>`)
     .join('');
   return `
     <header class="top">
@@ -87,7 +89,7 @@ function render(): void {
     if (!PUBLIC_PAGES.includes(page)) return go('prijava');
     return renderLoggedOut(page);
   }
-  if (!NAV[user.role].includes(page)) return go(NAV[user.role][0]!);
+  if (!NAV[user.role].includes(page) && !HIDDEN_PAGES[user.role].includes(page)) return go(NAV[user.role][0]!);
   renderLoggedIn(user, page, arg);
 }
 
