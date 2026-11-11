@@ -299,9 +299,10 @@ Pravila:
 
 Frontend:
 
-- **Mentorjev dashboard** (`#dashboard`, wireframe WF-04): panel »Učenci« (ime, e-naslov, stanje povezave; pri aktivnih učencih gumb »Odstrani« z dvostopenjsko potrditvijo) in »Povabi učenca« (e-naslov, »Pošlji vabilo«; razlog zavrnitve je ob polju). Panela »Zagoni za pregled« in »Skupna analitika učencev« sta zaenkrat prostor za naslednje naloge. Stolpec »Čaka« (število testov za pregled) se doda, ko trgovci lahko oddajajo teste.
+- **Mentorjev dashboard** (`#dashboard`, wireframe WF-04): panel »Učenci« (ime, e-naslov, stanje povezave, število vseh testov in stolpec »Čaka« za aktivne učence; gumb »Odstrani« z dvostopenjsko potrditvijo) in »Povabi učenca« (e-naslov, »Pošlji vabilo«; razlog zavrnitve je ob polju). Panel »Zagoni za pregled« ima zavihke Oddani, V pregledu, Spremembe in Odobreni, tabelo (Zagon, Učenec, Oddano, Stanje, akcija) in paginacijo po 20. Pri oddanih testih je akcija »Začni pregled«, ki odpre stran pregleda, pri ostalih »Odpri«. Panel »Skupna analitika učencev« je zaenkrat prostor za naslednjo nalogo.
 - **Stran Mentor trgovca** (`#mentor`): trenutni mentor z gumbom »Prekini povezavo« (s potrditvijo) in čakajoča vabila z imenom mentorja ter gumboma »Sprejmi« in »Zavrni«. Če trgovec že ima aktivnega mentorja, je ob sprejemu drugega vabila prikazano »Že imate aktivnega mentorja«.
 - Po vsakem dejanju se stran osveži; če se je stanje povezave medtem spremenilo (`404`, `409`), je prikazan razlog, vsebina pa se po kratkem času osveži.
+- **Mentorjev pogled testa** (`#pregled/<id>`): ista stran rezultatov kot pri trgovcu, samo za branje. Razdelek »Mentorski pregled« kaže učenca in zgodovino stanj, pri oddanem testu gumb »Začni pregled«. Stran ni v navigaciji; test, ki ga mentor ne vidi (osnutek, tuj učenec, prekinjena povezava), prikaže »Test ne obstaja«.
 
 ## Oddaja testa v mentorski pregled
 
@@ -327,6 +328,26 @@ Frontend (stran rezultatov `#backtests/<id>`, razdelek »Mentorski pregled«):
 - **Oddan:** gumb »Umakni oddajo« z dvostopenjsko potrditvijo. V stanju »V pregledu« gumba ni, prikazano je pojasnilo.
 - Prikazana sta mentor in zgodovina stanj (čas, prehod, uporabnik). Značka stanja je v glavi strani, stanje pa tudi v stolpcu »Stanje« v seznamu zagonov (`frontend/src/status.ts` hrani skupne nazive stanj).
 - Če se stanje medtem spremeni (`404`, `409`), je prikazan razlog, stran pa se po kratkem času osveži.
+
+### Mentorjev dostop do testov (samo branje)
+
+`GET /api/backtests/:id` in `GET /api/backtests/:id/trades` (US-13) lahko pokliče tudi mentor, vendar samo za teste, ki jih izpolnjeni vsi trije pogoji hkrati: test je bil oddan temu mentorju (`reviewer_id`), je v stanju `submitted`, `in_review`, `changes_requested` ali `approved` in je povezava z lastnikom testa `active`. Pogoj je v `visibleTo()` (`backend/src/backtestsApi.ts`) in velja za vse poti, ki berejo test.
+
+- Osnutki, umaknjeni testi, testi drugih trgovcev, testi, oddani drugemu mentorju, in testi učenca po prekinitvi povezave so za mentorja neobstoječi (`404`, P1).
+- Odgovor vsebuje še `owner` (`{ id, name }`, trgovec, ki je test naredil).
+- `PUT` in `PATCH` na `/api/backtests/:id` vrneta `403` (»Parametrov in rezultatov testa ni mogoče spreminjati«) za vsak viden test, tudi za lastnika, ker je izveden test nespremenljiv; za nevidni test `404`. Oddaja, umik in ustvarjanje testov ostanejo samo za trgovca (`403` za mentorja).
+
+### Mentorjev dashboard in začetek pregleda (API)
+
+| Pot | Vloga | Opis |
+|---|---|---|
+| `GET /api/mentor/students` | mentor | aktivni učenci: `{ id, name, email, test_count, waiting_count }`, po imenu |
+| `GET /api/mentor/backtests?status=&page=` | mentor | testi za pregled v stanju `status` (privzeto `submitted`; `submitted`, `in_review`, `changes_requested`, `approved`), po 20 na stran: `{ status, page, pageSize, total, pages, items: [{ id, strategy_name, status, owner, instruments, from, to, submitted_at }] }` |
+| `POST /api/backtests/:id/start-review` | mentor | `submitted` → `in_review`, prehod se zapiše v `status_history` |
+
+- `test_count` so vsi testi učenca, ki jih mentor vidi (oddani in naprej; osnutki in umaknjeni testi se ne štejejo), `waiting_count` pa tisti v stanju `submitted`. Povabljeni, zavrnjeni in prekinjeni učenci na seznamu niso.
+- Čakajoči testi so urejeni od najstarejše oddaje (vrstni red pregleda), ostali od najnovejšega. `submitted_at` je čas zadnje oddaje iz `status_history`. Neveljavno stanje ali stran vrne `400`, stran za zadnjo je veljavna in vrne prazen seznam.
+- Začetek pregleda uporablja pravilo `visibleTo()`: test, ki ga mentor ne vidi, je `404`, test v drugem stanju kot `submitted` je `409`. Vrstica se pred spremembo zaklene, zato sočasna zahtevka ne podvojita prehoda.
 
 ## Testiranje
 

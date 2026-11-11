@@ -1,8 +1,9 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { Pool } from 'pg';
 import { login, logout, register, type Result, type User } from './auth.ts';
-import { submitBacktest, withdrawBacktest } from './backtestReview.ts';
-import { createBacktest, getBacktest, getTrades, listBacktests } from './backtestsApi.ts';
+import { startReview, submitBacktest, withdrawBacktest } from './backtestReview.ts';
+import { listReviewQueue, listStudents } from './mentorReview.ts';
+import { createBacktest, getBacktest, getTrades, listBacktests, rejectEdit } from './backtestsApi.ts';
 import type { CandleStore } from './candles.ts';
 import { COOKIE_NAME, readCookie, verifyToken } from './session.ts';
 import { acceptLink, declineLink, endLink, invite, listLinks } from './mentorLinks.ts';
@@ -121,12 +122,24 @@ const routes: Record<string, Record<string, Route>> = {
     GET: guarded(['trader'], async ({ pool, user }) => listBacktests(pool, user!)),
     POST: guarded(['trader'], async ({ pool, store, user }, req) => createBacktest(pool, store, user!, await readJson(req))),
   },
-  '/api/backtests/:id': { GET: guarded(['trader'], async ({ pool, user, params }) => getBacktest(pool, user!, params.id!)) },
+  '/api/backtests/:id': {
+    GET: guarded(['trader', 'mentor'], async ({ pool, user, params }) => getBacktest(pool, user!, params.id!)),
+    PUT: guarded(['trader', 'mentor'], async ({ pool, user, params }) => rejectEdit(pool, user!, params.id!)),
+    PATCH: guarded(['trader', 'mentor'], async ({ pool, user, params }) => rejectEdit(pool, user!, params.id!)),
+  },
   '/api/backtests/:id/submit': { POST: guarded(['trader'], async ({ pool, user, params }) => submitBacktest(pool, user!, params.id!)) },
   '/api/backtests/:id/withdraw': { POST: guarded(['trader'], async ({ pool, user, params }) => withdrawBacktest(pool, user!, params.id!)) },
+  '/api/backtests/:id/start-review': { POST: guarded(['mentor'], async ({ pool, user, params }) => startReview(pool, user!, params.id!)) },
   '/api/backtests/:id/trades': {
-    GET: guarded(['trader'], async ({ pool, user, params }, req) =>
+    GET: guarded(['trader', 'mentor'], async ({ pool, user, params }, req) =>
       getTrades(pool, user!, params.id!, new URL(req.url ?? '/', 'http://localhost').searchParams.get('page'))),
+  },
+  '/api/mentor/students': { GET: guarded(['mentor'], async ({ pool, user }) => listStudents(pool, user!)) },
+  '/api/mentor/backtests': {
+    GET: guarded(['mentor'], async ({ pool, user }, req) => {
+      const query = new URL(req.url ?? '/', 'http://localhost').searchParams;
+      return listReviewQueue(pool, user!, query.get('status'), query.get('page'));
+    }),
   },
   '/api/mentor-links': {
     GET: guarded(['mentor', 'trader'], async ({ pool, user }) => listLinks(pool, user!)),

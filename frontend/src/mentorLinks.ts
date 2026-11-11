@@ -1,10 +1,17 @@
 import { errorMessage, getJson, postJson } from './api';
+import { renderReviewQueue } from './reviewQueue';
 
 interface Link {
   id: number;
   status: 'invited' | 'active' | 'declined' | 'ended';
   mentor: { id: number; name: string };
   trader: { id: number; name: string; email: string };
+}
+
+interface Student {
+  id: number;
+  test_count: number;
+  waiting_count: number;
 }
 
 const STATUS_LABELS: Record<Link['status'], string> = {
@@ -70,8 +77,9 @@ async function act(id: number, action: 'accept' | 'decline' | 'end', message: HT
 export async function renderMentorDashboard(container: HTMLElement, onUnauthorized: () => void): Promise<void> {
   const reload = () => void renderMentorDashboard(container, onUnauthorized);
   container.innerHTML = '<h2>Dashboard</h2><p>Nalagam ...</p>';
-  const loaded = await loadLinks();
-  if (!loaded) return onUnauthorized();
+  const [loaded, counts] = await Promise.all([loadLinks(), getJson('/api/mentor/students')]);
+  if (!loaded || counts.status === 401) return onUnauthorized();
+  const countOf = new Map((counts.status === 200 ? (counts.data as Student[]) : []).map((s) => [s.id, s]));
   container.innerHTML = '<h2>Dashboard</h2><div class="split"><div id="left"></div><div id="right"></div></div>';
   const left = container.querySelector<HTMLElement>('#left')!;
   const right = container.querySelector<HTMLElement>('#right')!;
@@ -87,13 +95,18 @@ export async function renderMentorDashboard(container: HTMLElement, onUnauthoriz
     students.append(make('p', 'hint', 'Še nimate učencev. Povabite trgovca z e-naslovom.'));
   } else {
     const table = make('table');
-    table.innerHTML = '<thead><tr><th>Ime</th><th>Stanje</th><th></th></tr></thead>';
+    table.innerHTML = '<thead><tr><th>Ime</th><th>Stanje</th><th>Testi</th><th>Čaka</th><th></th></tr></thead>';
     const body = table.createTBody();
     for (const link of loaded.links) {
       const row = body.insertRow();
       const name = row.insertCell();
       name.append(make('div', undefined, link.trader.name), make('div', 'hint', link.trader.email));
       row.insertCell().textContent = STATUS_LABELS[link.status];
+      const student = link.status === 'active' ? countOf.get(link.trader.id) : undefined;
+      row.insertCell().textContent = student ? String(student.test_count) : '–';
+      const waiting = row.insertCell();
+      waiting.textContent = student ? String(student.waiting_count) : '–';
+      waiting.dataset.waiting = '';
       const actions = row.insertCell();
       if (link.status === 'active') {
         actions.append(confirmButton('Odstrani', 'Potrdi odstranitev', () => void act(link.id, 'end', message, reload, onUnauthorized)));
@@ -133,11 +146,11 @@ export async function renderMentorDashboard(container: HTMLElement, onUnauthoriz
   inviteBox.append(form);
   left.append(students, inviteBox);
 
-  right.append(
-    panel('Zagoni za pregled'),
-    panel('Skupna analitika učencev'),
-  );
-  for (const box of right.querySelectorAll('section')) box.append(make('p', 'hint', 'Ta del bo na voljo v naslednjih korakih razvoja.'));
+  const queue = panel('Zagoni za pregled');
+  renderReviewQueue(queue, onUnauthorized);
+  const analytics = panel('Skupna analitika učencev');
+  analytics.append(make('p', 'hint', 'Ta del bo na voljo v naslednjih korakih razvoja.'));
+  right.append(queue, analytics);
 }
 
 // Stran Mentor trgovca: čakajoča vabila (sprejmi ali zavrni) in trenutni mentor (prekini povezavo).

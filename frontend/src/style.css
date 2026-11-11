@@ -73,3 +73,7 @@ table.rules { margin-bottom: 0.5rem; }
 .review-actions .hint { margin: 0; }
 .history { margin: 0.25rem 0 0; padding-left: 1.25rem; font-size: 0.85rem; }
 button:disabled { cursor: not-allowed; }
+
+.pager { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.75rem; }
+.pager button { margin-top: 0; }
+.pager .hint { margin: 0; }

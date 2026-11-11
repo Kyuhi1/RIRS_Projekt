@@ -1,5 +1,6 @@
 import { errorMessage, getJson, postJson } from './api';
 import { statusLabel } from './status';
+import type { Role } from './session';
 
 export interface HistoryEntry {
   from_status: string;
@@ -11,6 +12,7 @@ export interface ReviewState {
   id: number;
   status: string;
   reviewer: { id: number; name: string } | null;
+  owner?: { id: number; name: string };
   history: HistoryEntry[];
 }
 
@@ -47,12 +49,12 @@ async function hasActiveMentor(): Promise<boolean | null> {
 }
 
 // Razdelek »Mentorski pregled« na strani rezultatov (US-12): oddaja, umik, mentor in zgodovina stanj.
-export async function renderReview(box: HTMLElement, test: ReviewState, reload: () => void, onUnauthorized: () => void): Promise<void> {
+export async function renderReview(box: HTMLElement, test: ReviewState, reload: () => void, onUnauthorized: () => void, role: Role = 'trader'): Promise<void> {
   const message = make('p', 'error');
   message.setAttribute('role', 'alert');
   const actions = make('div', 'review-actions');
 
-  const act = async (action: 'submit' | 'withdraw') => {
+  const act = async (action: 'submit' | 'withdraw' | 'start-review') => {
     message.textContent = '';
     try {
       const { status, data } = await postJson(`/api/backtests/${test.id}/${action}`);
@@ -65,7 +67,10 @@ export async function renderReview(box: HTMLElement, test: ReviewState, reload: 
     }
   };
 
-  if (test.status === 'draft') {
+  if (role === 'mentor') {
+    if (test.status === 'submitted') actions.append(button('Začni pregled', () => void act('start-review')));
+    else if (test.status === 'in_review') actions.append(make('p', 'hint', 'Pregled poteka.'));
+  } else if (test.status === 'draft') {
     const active = await hasActiveMentor();
     if (active === null) return onUnauthorized();
     const submit = button('Oddaj mentorju', () => void act('submit'));
@@ -84,7 +89,11 @@ export async function renderReview(box: HTMLElement, test: ReviewState, reload: 
     actions.append(make('p', 'hint', 'Mentor je pregled začel, oddaje ni več mogoče umakniti.'));
   }
 
-  const facts = make('p', 'hint', test.reviewer ? `Mentor: ${test.reviewer.name}` : 'Test še ni oddan mentorju.');
+  const facts = make(
+    'p',
+    'hint',
+    role === 'mentor' ? `Učenec: ${test.owner?.name ?? '–'}. Test je samo za branje.` : test.reviewer ? `Mentor: ${test.reviewer.name}` : 'Test še ni oddan mentorju.',
+  );
   facts.dataset.reviewer = '';
   const history = make('ol', 'history');
   for (const h of test.history) {
