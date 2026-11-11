@@ -30,6 +30,8 @@ export interface Strategy {
   description: string;
   author: string; // »Sistem« pri sistemskih strategijah
   visibility: 'private' | 'shared';
+  system: boolean; // sistemska strategija (brez lastnika)
+  mine: boolean; // lastna strategija
 }
 export interface Reference {
   instruments: Instrument[];

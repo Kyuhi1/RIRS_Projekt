@@ -8,7 +8,8 @@
   "scripts": {
     "start": "node src/main.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --test \"src/**/*.test.ts\""
+    "test": "node --test \"src/**/*.test.ts\"",
+    "seed:demo": "node scripts/seed-demo.ts"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
