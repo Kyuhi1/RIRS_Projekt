@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type { Result, User } from './auth.ts';
-import { getBacktest } from './backtestsApi.ts';
+import { getBacktest, visibleTo } from './backtestsApi.ts';
 import { transition, type Action, type Status } from './testStatus.ts';
 
 // Oddaja testa mentorju in umik oddaje (US-12). Vsak prehod je ena transakcija: sprememba stanja in
@@ -55,3 +55,32 @@ async function change(pool: Pool, user: User, id: string, action: Extract<Action
 
 export const submitBacktest = (pool: Pool, user: User, id: string) => change(pool, user, id, 'submit');
 export const withdrawBacktest = (pool: Pool, user: User, id: string) => change(pool, user, id, 'withdraw');
+
+// Mentor začne pregled oddanega testa svojega aktivnega učenca (US-13): submitted -> in_review.
+// Test, ki ga mentor ne vidi, je 404; v drugem stanju kot submitted je 409.
+export async function startReview(pool: Pool, user: User, id: string): Promise<Result> {
+  if (!/^\d{1,15}$/.test(id)) return NOT_FOUND;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query<{ status: Status }>(`SELECT b.status FROM backtests b WHERE b.id = $1 AND ${visibleTo(user)} FOR UPDATE OF b`, [id, user.id]);
+    if (!rows[0]) {
+      await client.query('ROLLBACK');
+      return NOT_FOUND;
+    }
+    const outcome = transition(rows[0].status, 'start-review', 'reviewer');
+    if (!outcome.ok) {
+      await client.query('ROLLBACK');
+      return { status: 409, body: { error: 'Pregled je mogoče začeti samo pri oddanem testu' } };
+    }
+    await client.query('UPDATE backtests SET status = $2 WHERE id = $1', [id, outcome.to]);
+    await client.query('INSERT INTO status_history (backtest_id, from_status, to_status, changed_by) VALUES ($1, $2, $3, $4)', [id, rows[0].status, outcome.to, user.id]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+  return getBacktest(pool, user, id);
+}

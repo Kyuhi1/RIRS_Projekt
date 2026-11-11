@@ -336,6 +336,18 @@ Frontend (stran rezultatov `#backtests/<id>`, razdelek »Mentorski pregled«):
 - Odgovor vsebuje še `owner` (`{ id, name }`, trgovec, ki je test naredil).
 - `PUT` in `PATCH` na `/api/backtests/:id` vrneta `403` (»Parametrov in rezultatov testa ni mogoče spreminjati«) za vsak viden test, tudi za lastnika, ker je izveden test nespremenljiv; za nevidni test `404`. Oddaja, umik in ustvarjanje testov ostanejo samo za trgovca (`403` za mentorja).
 
+### Mentorjev dashboard in začetek pregleda (API)
+
+| Pot | Vloga | Opis |
+|---|---|---|
+| `GET /api/mentor/students` | mentor | aktivni učenci: `{ id, name, email, test_count, waiting_count }`, po imenu |
+| `GET /api/mentor/backtests?status=&page=` | mentor | testi za pregled v stanju `status` (privzeto `submitted`; `submitted`, `in_review`, `changes_requested`, `approved`), po 20 na stran: `{ status, page, pageSize, total, pages, items: [{ id, strategy_name, status, owner, instruments, from, to, submitted_at }] }` |
+| `POST /api/backtests/:id/start-review` | mentor | `submitted` → `in_review`, prehod se zapiše v `status_history` |
+
+- `test_count` so vsi testi učenca, ki jih mentor vidi (oddani in naprej; osnutki in umaknjeni testi se ne štejejo), `waiting_count` pa tisti v stanju `submitted`. Povabljeni, zavrnjeni in prekinjeni učenci na seznamu niso.
+- Čakajoči testi so urejeni od najstarejše oddaje (vrstni red pregleda), ostali od najnovejšega. `submitted_at` je čas zadnje oddaje iz `status_history`. Neveljavno stanje ali stran vrne `400`, stran za zadnjo je veljavna in vrne prazen seznam.
+- Začetek pregleda uporablja pravilo `visibleTo()`: test, ki ga mentor ne vidi, je `404`, test v drugem stanju kot `submitted` je `409`. Vrstica se pred spremembo zaklene, zato sočasna zahtevka ne podvojita prehoda.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:

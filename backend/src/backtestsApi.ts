@@ -13,15 +13,15 @@ const SELECT = `
          CASE WHEN pp.id IS NULL THEN NULL ELSE jsonb_build_object('id', pp.id, 'firm_name', pp.firm_name, 'plan_name', pp.plan_name,
            'account_size', pp.account_size, 'profit_target', pp.profit_target,
            'max_daily_loss', pp.max_daily_loss, 'max_total_loss', pp.max_total_loss) END AS prop_plan`;
-// Kdo vidi test (parameter $2 je id uporabnika): trgovec svoje teste, mentor oddane teste svojih aktivnih
-// učencev. Osnutkov in umaknjenih testov mentor ne vidi, prav tako ne testov učenca po prekinitvi povezave
-// ali testov, oddanih drugemu mentorju. Tuj test je vedno kot neobstoječ (404, P1).
+// Kdo vidi test (`param` je številka parametra z id-jem uporabnika): trgovec svoje teste, mentor oddane teste
+// svojih aktivnih učencev. Osnutkov in umaknjenih testov mentor ne vidi, prav tako ne testov učenca po
+// prekinitvi povezave ali testov, oddanih drugemu mentorju. Tuj test je vedno kot neobstoječ (404, P1).
 export const MENTOR_STATUSES = ['submitted', 'in_review', 'changes_requested', 'approved'] as const;
-export const visibleTo = (user: User): string =>
+export const visibleTo = (user: User, param = 2): string =>
   user.role === 'mentor'
-    ? `(b.reviewer_id = $2 AND b.status IN ('submitted', 'in_review', 'changes_requested', 'approved')
-        AND EXISTS (SELECT 1 FROM mentor_links l WHERE l.mentor_id = $2 AND l.trader_id = b.owner_id AND l.status = 'active'))`
-    : 'b.owner_id = $2';
+    ? `(b.reviewer_id = $${param} AND b.status IN ('submitted', 'in_review', 'changes_requested', 'approved')
+        AND EXISTS (SELECT 1 FROM mentor_links l WHERE l.mentor_id = $${param} AND l.trader_id = b.owner_id AND l.status = 'active'))`
+    : `b.owner_id = $${param}`;
 
 const FROM = 'FROM backtests b JOIN strategies s ON s.id = b.strategy_id LEFT JOIN prop_plans pp ON pp.id = b.prop_plan_id';
 
