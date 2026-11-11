@@ -105,3 +105,5 @@ table.compare td.best { background: #e6f4ea; font-weight: 600; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 table.compare td { overflow-wrap: anywhere; }
 table.compare code { word-break: break-all; }
+.compare-bar input { flex: 1; margin-top: 0; }
+.compare-bar button { white-space: nowrap; margin-top: 0; }

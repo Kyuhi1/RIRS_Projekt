@@ -427,6 +427,27 @@ Ko mentor zahteva spremembe (`changes_requested`), trgovec iz testa naredi ponov
 - Na mentorjevem dashboardu (panel »Skupna analitika učencev«): izbira obdobja (Zadnjih 30 dni, Zadnjih 90 dni, Vse; privzeto Vse), štiri skupne metrike (testi, odobreni, napake, povprečni največji padec) s povprečjem na učenca in tabela učencev.
 - Prazna stanja: brez aktivnih učencev »Ni aktivnih učencev …«, brez testov v obdobju »… še nimajo testov za analizo«; učenec brez testov ima namesto deleža in padca »–«, ne 0.
 
+### Vzdrževanje referenčnih podatkov (API)
+
+- Samo administrator (drugi `403`, neprijavljen `401`): `GET|POST /api/admin/{instruments,venues,prop-plans}` (seznam z iskanjem `?q=` in številom testov `used_by`, ustvarjanje) ter `PUT|DELETE /api/admin/<vrsta>/:ključ` (urejanje, brisanje). Trgovec in mentor še naprej berejo `/api/instruments`, `/api/venues` in `/api/prop-plans` za izbiro v obrazcih.
+- Ključ zapisa (`ticker` oziroma `id`) se določi ob ustvarjanju in se ne spreminja; podvojen ključ je `409`.
+- Preverjanje (`400` s polji): obvezna polja, `maker_pct` in `taker_pct` števili med 0 in 1 (delež vrednosti posla), zneski načrta (`account_size`, `max_daily_loss`, `max_total_loss`, `profit_target`) števila, večja od 0 (kot omejitve v bazi; ničelni znesek bi pokvaril simulacijo), skupina sredstva `crypto`, `forex`, `index` ali `gold`.
+- Brisanje zapisa, ki ga uporablja vsaj en test, vrne `409` s `tests` (število testov); sredstvu se ob brisanju izbrišejo tudi razponi (`spreads`), podatki Parquet ostanejo na disku.
+- Sprememba borze ali načrta ne spremeni že shranjenih rezultatov (P8): rezultat hrani vse zneske in izid preverjanja sam; ponovitev testa uporabi trenutne vrednosti.
+
+### Upravljanje uporabnikov (API)
+
+- Samo administrator: `GET /api/admin/users?q=&page=` (iskanje po imenu ali e-naslovu, po 20 na stran; odgovor `{page, pageSize, total, pages, items}` brez gesel), `POST /api/admin/users` (ime, e-naslov, geslo, vloga `trader`, `mentor` ali `admin`) in `PATCH /api/admin/users/:id` (`name`, `role`, `blocked`).
+- Blokiran uporabnik se ne more prijaviti (`403`), obstoječ žeton pa neha veljati že pri naslednjem zahtevku (`401`), ker se uporabnik ob vsakem zahtevku prebere iz baze. Enako velja za vlogo: nova vloga velja od naslednjega zahtevka.
+- Zaščite (`409` z razlogom): administrator ne more blokirati samega sebe, zadnjemu aktivnemu administratorju se vloga ne odvzame in ga ni mogoče blokirati. Administratorji se pri tem zaklenejo v stalnem vrstnem redu, zato dva sočasna odvzema ne moreta oba uspeti.
+- Administrator ne vidi zasebnih strategij (`404`) in nima dostopa do testov (`403`).
+
+### Administracija (frontend)
+
+- Stran Administracija (administrator) ima zavihke **Venues**, **Prop plans**, **Instruments** in **Uporabniki** z istim vzorcem: iskanje, »+ Dodaj«, tabela in panel za urejanje (WF-06).
+- Referenčni podatki: ključ (id, oznaka) se po ustvarjanju ne spreminja; napake preverjanja se prikažejo ob poljih; zapis, ki ga uporablja test, ima onemogočen »Izbriši« s pojasnilom, v stolpcu Testi pa je število uporab.
+- Uporabniki: seznam (Ime, E-naslov, Vloga, Stanje) z iskanjem in paginacijo po 20; panel »Urejanje uporabnika« (Ime, Vloga, Blokiran) in »Nov račun«; razlog zavrnitve (npr. zadnji administrator, blokada sebe) se prikaže v panelu.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:
