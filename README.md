@@ -55,8 +55,6 @@ Ob prvem zagonu backend ustvari shemo in referenčne podatke ter administratorja
 
 Format: `data/<TICKER>/<LLLL-MM>.parquet`, minutne svečke s stolpci `open_time` (ms od 1970, UTC), `open`, `high`, `low`, `close`, `volume`. Mapo priklopi `docker-compose.yml` v backend kot `/data` (samo za branje). Podatki se berejo ob vsakem zahtevku, zato po dodajanju datotek ponovni zagon ni potreben. Za testiranje strategij zadošča izbrano obdobje v letu 2025. Sredstva brez podatkov imajo v `GET /api/instruments` `candles: 0`.
 
-Test lahko teče na celotnem letu minutnih podatkov (omejitev je 1.000.000 svečk na sredstvo, izračun traja nekaj sekund, najdaljši dovoljen čas je 5 minut). Pri daljših obdobjih izberi večji časovni okvir (od 5 minut do 1 dneva), s katerim se svečke združijo še pred izvedbo strategije.
-
 Preverjanje (endpoint zahteva prijavo):
 
 ```bash
