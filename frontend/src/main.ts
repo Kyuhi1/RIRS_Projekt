@@ -84,7 +84,8 @@ function renderLoggedIn(current: User, page: string, arg?: string): void {
 
 // Zaščita strani v brskalniku je samo udobje; dostop dejansko preverja backend (ADR 0005).
 function render(): void {
-  const [page = '', arg] = currentHash().split('/');
+  const [page = '', ...rest] = currentHash().split('/');
+  const arg = rest.length ? rest.join('/') : undefined; // npr. »12« ali »primerjava/3,7,9«
   if (!user) {
     if (!PUBLIC_PAGES.includes(page)) return go('prijava');
     return renderLoggedOut(page);

@@ -4,7 +4,7 @@ import { login, logout, register, type Result, type User } from './auth.ts';
 import { approveBacktest, requestChanges, startReview, submitBacktest, withdrawBacktest } from './backtestReview.ts';
 import { addComment, listComments } from './comments.ts';
 import { listReviewQueue, listStudents } from './mentorReview.ts';
-import { createBacktest, getBacktest, getTrades, listBacktests, rejectEdit, retestBacktest, setBacktestVisibility } from './backtestsApi.ts';
+import { compareBacktests, createBacktest, getBacktest, getTrades, listBacktests, rejectEdit, retestBacktest, setBacktestVisibility } from './backtestsApi.ts';
 import type { CandleStore } from './candles.ts';
 import { COOKIE_NAME, readCookie, verifyToken } from './session.ts';
 import { acceptLink, declineLink, endLink, invite, listLinks } from './mentorLinks.ts';
@@ -130,6 +130,7 @@ const routes: Record<string, Record<string, Route>> = {
     GET: guarded(['trader'], async ({ pool, user }, req) => listBacktests(pool, user!, new URL(req.url ?? '/', 'http://localhost').searchParams.get('scope'))),
     POST: guarded(['trader'], async ({ pool, store, user }, req) => createBacktest(pool, store, user!, await readJson(req))),
   },
+  '/api/backtests/compare': { GET: guarded(['trader'], async ({ pool, user }, req) => compareBacktests(pool, user!, new URL(req.url ?? '/', 'http://localhost').searchParams.get('ids'))) },
   '/api/backtests/:id': {
     GET: guarded(['trader', 'mentor'], async ({ pool, user, params }) => getBacktest(pool, user!, params.id!)),
     PUT: guarded(['trader', 'mentor'], async ({ pool, user, params }) => rejectEdit(pool, user!, params.id!)),

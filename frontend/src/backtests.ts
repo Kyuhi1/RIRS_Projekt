@@ -1,3 +1,4 @@
+import { renderCompare } from './compare';
 import { renderNewTest } from './newTest';
 import { loadReference } from './refdata';
 import { renderResult } from './result';
@@ -5,6 +6,7 @@ import { renderRuns } from './runs';
 
 // Stran Backtests (WF-02): levo obrazec za nov test, desno seznam zagonov.
 export async function renderBacktests(container: HTMLElement, arg: string | undefined, onUnauthorized: () => void): Promise<void> {
+  if (arg?.startsWith('primerjava/')) return renderCompare(container, arg.slice('primerjava/'.length), onUnauthorized);
   if (arg) return renderResult(container, arg, onUnauthorized);
 
   container.innerHTML = '<p>Nalagam ...</p>';

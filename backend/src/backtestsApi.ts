@@ -183,3 +183,37 @@ export async function setBacktestVisibility(pool: Pool, user: User, id: string, 
   await pool.query('UPDATE backtests SET visibility = $2 WHERE id = $1', [id, visibility]);
   return getBacktest(pool, user, id);
 }
+
+export const COMPARE_MIN = 2;
+export const COMPARE_MAX = 4;
+
+// Primerjava 2–4 testov (US-09): `ids` je seznam id-jev, ločenih z vejicami (npr. `3,7,9`), vrstni red se ohrani.
+// Primerjati je mogoče samo teste, ki jih trgovec sme brati (lastne in deljene); če je kateri nevidni ali neobstoječ,
+// vrne 404 za celoto, da ni mogoče ugotoviti, kateri tuji testi obstajajo (P1). Tuji testi so brez mentorja in povezav.
+export async function compareBacktests(pool: Pool, user: User, ids: string | null): Promise<Result> {
+  const parts = ids === null || ids === '' ? [] : ids.split(',');
+  if (!parts.every((part) => /^[1-9]\d{0,14}$/.test(part))) return { status: 400, body: { errors: { ids: 'Id-ji morajo biti cela števila, ločena z vejicami' } } };
+  if (new Set(parts).size !== parts.length) return { status: 400, body: { errors: { ids: 'Isti test je izbran večkrat' } } };
+  if (parts.length < COMPARE_MIN || parts.length > COMPARE_MAX) {
+    return { status: 400, body: { errors: { ids: `Izberite od ${COMPARE_MIN} do ${COMPARE_MAX} testov` } } };
+  }
+  const { rows } = await pool.query(
+    `${SELECT}, jsonb_build_object('initialCapital', b.results -> 'initialCapital', 'netProfit', b.results -> 'netProfit',
+         'returnPct', b.results -> 'returnPct', 'tradeCount', b.results -> 'tradeCount', 'winRatePct', b.results -> 'winRatePct',
+         'maxDrawdownPct', b.results -> 'maxDrawdownPct', 'equityCurve', b.results -> 'equityCurve') AS results
+     ${FROM} WHERE b.id = ANY($1::bigint[]) AND ${viewableBy(user, 2)}`,
+    [parts, user.id],
+  );
+  if (rows.length !== parts.length) return { status: 404, body: { error: 'Test ne obstaja' } };
+  const byId = new Map(rows.map((row) => [Number(row.id), row]));
+  // Mentor, stanje pregleda in povezave med testi niso del primerjave (pri tujih testih so zasebni).
+  const tests = parts.map((part) => {
+    const row = byId.get(Number(part));
+    return {
+      id: Number(row.id), strategy_id: Number(row.strategy_id), strategy_name: row.strategy_name, venue_id: row.venue_id,
+      instruments: row.instruments, from: row.from, to: row.to, params: row.params, owner: row.owner,
+      prop_plan: row.prop_plan, challenge_passed: row.challenge_passed, results: row.results,
+    };
+  });
+  return { status: 200, body: { tests } };
+}
