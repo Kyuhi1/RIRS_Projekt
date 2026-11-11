@@ -1,5 +1,7 @@
 import { errorMessage, getJson } from './api';
 import { renderEquityChart, type EquityPoint, type Marker } from './equityChart';
+import { renderReview, type HistoryEntry } from './review';
+import { statusLabel } from './status';
 import { renderTrades } from './trades';
 
 interface Venue {
@@ -32,6 +34,8 @@ interface BacktestDetail {
   prop_plan: { id: string; firm_name: string; plan_name: string } | null;
   status: string;
   visibility: 'private' | 'shared';
+  reviewer: { id: number; name: string } | null;
+  history: HistoryEntry[];
   results: {
     initialCapital: number;
     finalCapital: number;
@@ -47,14 +51,6 @@ interface BacktestDetail {
   };
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: 'Osnutek',
-  submitted: 'Oddan mentorju',
-  in_review: 'V pregledu',
-  changes_requested: 'Zahtevane spremembe',
-  approved: 'Odobren',
-  withdrawn: 'Umaknjen',
-};
 const money = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}`;
 const sign = (value: number) => (value >= 0 ? 'positive' : 'negative');
 
@@ -133,7 +129,7 @@ export async function renderResult(container: HTMLElement, id: string, onUnautho
   const venueName = venue?.name ?? t.venue_id;
 
   const header = make('header', 'result-head');
-  header.append(make('h2', undefined, `Zagon #${t.id}: ${t.strategy_name}`), make('span', 'badge', STATUS_LABELS[t.status] ?? t.status));
+  header.append(make('h2', undefined, `Zagon #${t.id}: ${t.strategy_name}`), make('span', 'badge', statusLabel(t.status)));
 
   const metrics = make('div', 'metrics');
   metrics.append(
@@ -183,6 +179,11 @@ export async function renderResult(container: HTMLElement, id: string, onUnautho
   const cards = make('div', r.challenge ? 'cards-two' : '');
   cards.append(costs);
   if (r.challenge) cards.append(rulesSection(r.challenge));
-  container.append(header, metrics, settings, chart, cards, trades);
-  await renderTrades(tradesBox, t.id, onUnauthorized);
+  const reviewBox = make('div');
+  const review = section('Mentorski pregled', reviewBox);
+  container.append(header, metrics, review, settings, chart, cards, trades);
+  await Promise.all([
+    renderReview(reviewBox, t, () => void renderResult(container, id, onUnauthorized), onUnauthorized),
+    renderTrades(tradesBox, t.id, onUnauthorized),
+  ]);
 }

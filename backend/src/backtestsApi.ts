@@ -8,6 +8,7 @@ const SELECT = `
          ARRAY(SELECT ticker FROM backtest_instruments WHERE backtest_id = b.id ORDER BY ticker) AS instruments,
          to_char(b.period_from, 'YYYY-MM-DD') AS "from", to_char(b.period_to, 'YYYY-MM-DD') AS "to",
          b.params, b.status, b.visibility, b.created_at, b.challenge_passed,
+         (SELECT jsonb_build_object('id', u.id::int, 'name', u.name) FROM users u WHERE u.id = b.reviewer_id) AS reviewer,
          CASE WHEN pp.id IS NULL THEN NULL ELSE jsonb_build_object('id', pp.id, 'firm_name', pp.firm_name, 'plan_name', pp.plan_name,
            'account_size', pp.account_size, 'profit_target', pp.profit_target,
            'max_daily_loss', pp.max_daily_loss, 'max_total_loss', pp.max_total_loss) END AS prop_plan`;
@@ -64,7 +65,11 @@ export async function listBacktests(pool: Pool, user: User): Promise<Result> {
 // Posli niso del odgovora (lahko jih je veliko); dobi jih `getTrades` po straneh.
 export async function getBacktest(pool: Pool, user: User, id: string, status = 200): Promise<Result> {
   if (!/^\d{1,15}$/.test(id)) return { status: 404, body: { error: 'Test ne obstaja' } };
-  const { rows } = await pool.query(`${SELECT}, b.results - 'trades' AS results ${FROM} WHERE b.id = $1 AND b.owner_id = $2`, [id, user.id]);
+  const { rows } = await pool.query(`${SELECT}, b.results - 'trades' AS results,
+       COALESCE((SELECT jsonb_agg(jsonb_build_object('from_status', h.from_status, 'to_status', h.to_status, 'changed_at', h.changed_at,
+                   'changed_by', jsonb_build_object('id', c.id::int, 'name', c.name)) ORDER BY h.id)
+                 FROM status_history h JOIN users c ON c.id = h.changed_by WHERE h.backtest_id = b.id), '[]'::jsonb) AS history
+     ${FROM} WHERE b.id = $1 AND b.owner_id = $2`, [id, user.id]);
   return rows[0] ? { status, body: withId(rows[0]) } : { status: 404, body: { error: 'Test ne obstaja' } };
 }
 

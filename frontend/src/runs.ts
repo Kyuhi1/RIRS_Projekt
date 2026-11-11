@@ -1,4 +1,5 @@
 import { errorMessage, getJson } from './api';
+import { statusLabel } from './status';
 import { ASSET_CLASS_LABELS, type Instrument, type Reference } from './refdata';
 
 interface Run {
@@ -9,6 +10,7 @@ interface Run {
   from: string;
   to: string;
   visibility: 'private' | 'shared';
+  status: string;
   prop_plan: { firm_name: string; plan_name: string } | null;
   challenge_passed: boolean | null;
   summary: { netProfit: number; returnPct: number };
@@ -51,7 +53,7 @@ export async function renderRuns(container: HTMLElement, ref: Reference, onUnaut
       table.innerHTML = '<p>Ni zagonov</p>';
       return;
     }
-    table.innerHTML = '<table><thead><tr><th>Zagon</th><th>Obdobje</th><th>Rezultat</th><th>Vidnost</th></tr></thead><tbody></tbody></table>';
+    table.innerHTML = '<table><thead><tr><th>Zagon</th><th>Obdobje</th><th>Rezultat</th><th>Stanje</th><th>Vidnost</th></tr></thead><tbody></tbody></table>';
     const body = table.querySelector('tbody')!;
     for (const run of shown) {
       const row = document.createElement('tr');
@@ -71,10 +73,15 @@ export async function renderRuns(container: HTMLElement, ref: Reference, onUnaut
       const result = document.createElement('td');
       result.className = run.summary.netProfit >= 0 ? 'positive' : 'negative';
       result.textContent = `${money(run.summary.netProfit)} (${money(run.summary.returnPct)} %)`;
+      const state = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = statusLabel(run.status);
+      state.append(badge);
       const visibility = document.createElement('td');
       visibility.textContent = VISIBILITY_LABELS[run.visibility];
 
-      row.append(name, period, result, visibility);
+      row.append(name, period, result, state, visibility);
       row.addEventListener('click', () => (location.hash = `backtests/${run.id}`));
       body.append(row);
     }

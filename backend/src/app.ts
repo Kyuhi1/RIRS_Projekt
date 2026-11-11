@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { Pool } from 'pg';
 import { login, logout, register, type Result, type User } from './auth.ts';
+import { submitBacktest, withdrawBacktest } from './backtestReview.ts';
 import { createBacktest, getBacktest, getTrades, listBacktests } from './backtestsApi.ts';
 import type { CandleStore } from './candles.ts';
 import { COOKIE_NAME, readCookie, verifyToken } from './session.ts';
@@ -121,6 +122,8 @@ const routes: Record<string, Record<string, Route>> = {
     POST: guarded(['trader'], async ({ pool, store, user }, req) => createBacktest(pool, store, user!, await readJson(req))),
   },
   '/api/backtests/:id': { GET: guarded(['trader'], async ({ pool, user, params }) => getBacktest(pool, user!, params.id!)) },
+  '/api/backtests/:id/submit': { POST: guarded(['trader'], async ({ pool, user, params }) => submitBacktest(pool, user!, params.id!)) },
+  '/api/backtests/:id/withdraw': { POST: guarded(['trader'], async ({ pool, user, params }) => withdrawBacktest(pool, user!, params.id!)) },
   '/api/backtests/:id/trades': {
     GET: guarded(['trader'], async ({ pool, user, params }, req) =>
       getTrades(pool, user!, params.id!, new URL(req.url ?? '/', 'http://localhost').searchParams.get('page'))),
