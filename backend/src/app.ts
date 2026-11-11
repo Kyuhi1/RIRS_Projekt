@@ -1,7 +1,8 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { Pool } from 'pg';
 import { login, logout, register, type Result, type User } from './auth.ts';
-import { startReview, submitBacktest, withdrawBacktest } from './backtestReview.ts';
+import { approveBacktest, requestChanges, startReview, submitBacktest, withdrawBacktest } from './backtestReview.ts';
+import { addComment, listComments } from './comments.ts';
 import { listReviewQueue, listStudents } from './mentorReview.ts';
 import { createBacktest, getBacktest, getTrades, listBacktests, rejectEdit } from './backtestsApi.ts';
 import type { CandleStore } from './candles.ts';
@@ -130,6 +131,12 @@ const routes: Record<string, Record<string, Route>> = {
   '/api/backtests/:id/submit': { POST: guarded(['trader'], async ({ pool, user, params }) => submitBacktest(pool, user!, params.id!)) },
   '/api/backtests/:id/withdraw': { POST: guarded(['trader'], async ({ pool, user, params }) => withdrawBacktest(pool, user!, params.id!)) },
   '/api/backtests/:id/start-review': { POST: guarded(['mentor'], async ({ pool, user, params }) => startReview(pool, user!, params.id!)) },
+  '/api/backtests/:id/request-changes': { POST: guarded(['mentor'], async ({ pool, user, params }) => requestChanges(pool, user!, params.id!)) },
+  '/api/backtests/:id/approve': { POST: guarded(['mentor'], async ({ pool, user, params }) => approveBacktest(pool, user!, params.id!)) },
+  '/api/backtests/:id/comments': {
+    GET: guarded(['trader', 'mentor'], async ({ pool, user, params }) => listComments(pool, user!, params.id!)),
+    POST: guarded(['mentor'], async ({ pool, user, params }, req) => addComment(pool, user!, params.id!, await readJson(req))),
+  },
   '/api/backtests/:id/trades': {
     GET: guarded(['trader', 'mentor'], async ({ pool, user, params }, req) =>
       getTrades(pool, user!, params.id!, new URL(req.url ?? '/', 'http://localhost').searchParams.get('page'))),

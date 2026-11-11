@@ -349,6 +349,22 @@ Frontend (stran rezultatov `#backtests/<id>`, razdelek »Mentorski pregled«):
 - Čakajoči testi so urejeni od najstarejše oddaje (vrstni red pregleda), ostali od najnovejšega. `submitted_at` je čas zadnje oddaje iz `status_history`. Neveljavno stanje ali stran vrne `400`, stran za zadnjo je veljavna in vrne prazen seznam.
 - Začetek pregleda uporablja pravilo `visibleTo()`: test, ki ga mentor ne vidi, je `404`, test v drugem stanju kot `submitted` je `409`. Vrstica se pred spremembo zaklene, zato sočasna zahtevka ne podvojita prehoda.
 
+### Komentarji in odločitev o testu (API)
+
+Tabela `comments` (migracija `011_comments.sql`, docs/03) hrani mentorjeve komentarje: `body` (1–2000 znakov), `is_mistake`, avtorja in čas.
+
+| Pot | Vloga | Opis |
+|---|---|---|
+| `GET /api/backtests/:id/comments` | trgovec (lastnik), mentor | komentarji testa od najstarejšega: `{ id, body, is_mistake, created_at, author: { id, name } }` |
+| `POST /api/backtests/:id/comments` | mentor | doda komentar `{ "body": "...", "is_mistake": false }`; `201` |
+| `POST /api/backtests/:id/request-changes` | mentor | `in_review` → `changes_requested`, samo če ima test vsaj en komentar |
+| `POST /api/backtests/:id/approve` | mentor | `in_review` → `approved` |
+
+- **Komentar:** besedilo se obreže, prazno ali daljše od 2000 znakov (štejejo znaki, ne bajti) je `400` z `{ "errors": { "body": "..." } }`; `is_mistake` mora biti `true` ali `false`. Dodati ga je mogoče samo med pregledom (`in_review`, sicer `409`) in samo k testu, ki ga mentor vidi (sicer `404`). Vrstica testa se pred vpisom zaklene, zato po odobritvi ali zahtevi za spremembe komentar ne more nastati niti pri sočasnih zahtevkih.
+- **Odločitev:** vsak prehod se zapiše v `status_history` (mentor, čas). Zahteva za spremembe brez komentarja je `409`; odobritev komentarja ne zahteva. Po odločitvi (`changes_requested`, `approved`) so komentarji zaklenjeni, stanji sta končni.
+- **Trgovec:** komentarje svojega testa lahko bere, dodajati, spreminjati ali brisati jih ne more (`403` pri dodajanju; poti za spreminjanje in brisanje ne obstajajo, `405`/`404`).
+- Testi v `testDb.ts` ustvarijo bazo s kodiranjem UTF-8 ne glede na privzeto kodiranje strežnika, da dolžina komentarja šteje znake.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:

@@ -9,7 +9,7 @@ export async function withTestDb(fn: (pool: pg.Pool) => Promise<void>): Promise<
   const name = `test_${randomBytes(6).toString('hex')}`;
   const admin = new pg.Client({ connectionString: adminUrl });
   await admin.connect();
-  await admin.query(`CREATE DATABASE ${name}`);
+  await admin.query(`CREATE DATABASE ${name} ENCODING 'UTF8' TEMPLATE template0`); // UTF-8 ne glede na privzeto kodiranje strežnika
 
   const url = new URL(adminUrl);
   url.pathname = `/${name}`;
