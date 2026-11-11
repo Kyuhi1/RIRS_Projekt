@@ -73,6 +73,7 @@ export function renderNewTest(container: HTMLElement, ref: Reference, onCreated:
     <h2>Nov test</h2>
     <form id="new-test" novalidate>
       <label for="strategy">Strategija</label>
+      <div class="presets" id="strategy-filters" role="group" aria-label="Filter strategij"></div>
       <select id="strategy" name="strategy_id"></select>
       <p class="hint"><a href="#strategije/nova">Naloži lastno strategijo</a></p>
       <span class="error" data-error="strategy_id"></span>
@@ -113,6 +114,7 @@ export function renderNewTest(container: HTMLElement, ref: Reference, onCreated:
       </fieldset>
       <span class="error" data-error="params"></span>
 
+      <p class="summary" id="summary" aria-live="polite"></p>
       <button type="submit" id="run">Zaženi test</button>
       <span class="error" role="alert" data-error="form"></span>
     </form>`;
@@ -122,9 +124,58 @@ export function renderNewTest(container: HTMLElement, ref: Reference, onCreated:
   const venue = $<HTMLSelectElement>('#venue');
   const hint = $('#range-hint');
 
-  fillOptions(strategy, ref.strategies.map((s) => ({ value: String(s.id), label: `${s.name} (${s.author})` })), 'Izberite strategijo');
+  // Filter strategij (WF-02): Vse, Moje, Sistemske in Deljene (deljene strategije drugih uporabnikov). Izbrana strategija
+  // ostane izbrana, če je v filtru; sicer se izbira počisti.
+  const STRATEGY_FILTERS: { key: string; label: string; match: (s: Reference['strategies'][number]) => boolean }[] = [
+    { key: 'all', label: 'Vse', match: () => true },
+    { key: 'mine', label: 'Moje', match: (s) => s.mine },
+    { key: 'system', label: 'Sistemske', match: (s) => s.system },
+    { key: 'shared', label: 'Deljene', match: (s) => !s.system && !s.mine && s.visibility === 'shared' },
+  ];
+  let strategyFilter = 'all';
+  const drawStrategies = () => {
+    const previous = strategy.value;
+    const match = STRATEGY_FILTERS.find((f) => f.key === strategyFilter)!.match;
+    fillOptions(strategy, ref.strategies.filter(match).map((s) => ({ value: String(s.id), label: `${s.name} (${s.author})` })), 'Izberite strategijo');
+    strategy.value = [...strategy.options].some((o) => o.value === previous) ? previous : '';
+    if (strategy.value !== previous) strategy.dispatchEvent(new Event('change'));
+    $('#strategy-filters').replaceChildren(
+      ...STRATEGY_FILTERS.map(({ key, label }) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.dataset.filter = key;
+        b.textContent = label;
+        b.classList.toggle('active', key === strategyFilter);
+        b.addEventListener('click', () => {
+          strategyFilter = key;
+          drawStrategies();
+        });
+        return b;
+      }),
+    );
+  };
+  drawStrategies();
   fillOptions(venue, ref.venues.map((v) => ({ value: v.id, label: v.name })), 'Izberite borzo');
   fillOptions($('#prop-plan'), ref.propPlans.map((p) => ({ value: p.id, label: `${p.firm_name} – ${p.plan_name}` })), 'Brez financiranega računa');
+
+  // Povzetek izbire (WF-02): posodobi se ob vsaki spremembi obrazca (tudi ob prednastavitvah obdobja, ki sprožijo klik).
+  const planSelect = $<HTMLSelectElement>('#prop-plan');
+  const chosen = (select: HTMLSelectElement) => (select.value ? select.selectedOptions[0]!.textContent! : '');
+  const drawSummary = () => {
+    const picked = [...container.querySelectorAll<HTMLInputElement>('input[name=instruments]:checked')].map((b) => b.value);
+    const from = $<HTMLInputElement>('#from').value;
+    const to = $<HTMLInputElement>('#to').value;
+    const parts = [
+      chosen(strategy) || 'strategija ni izbrana',
+      picked.length ? picked.join(', ') : 'sredstvo ni izbrano',
+      from && to ? `${from} do ${to}` : 'obdobje ni izbrano',
+      chosen(venue) || 'borza ni izbrana',
+      chosen(planSelect) || 'brez financiranega računa',
+    ];
+    $('#summary').textContent = `Povzetek: ${parts.join(' · ')}`;
+  };
+  for (const type of ['input', 'change', 'click']) container.addEventListener(type, () => queueMicrotask(drawSummary));
+  drawSummary();
 
   // Sredstva po skupinah; sredstva brez zgodovinskih podatkov so onemogočena.
   const list = $('#instruments');

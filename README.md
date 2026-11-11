@@ -28,16 +28,51 @@ Aplikacija je sestavljena iz treh ločenih storitev (frontend, backend, baza), k
 
 ## Lokalni zagon
 
-Potrebuješ Docker z Docker Compose.
+Potrebuješ Docker z Docker Compose (in Node.js 24 samo, če želiš teste ali demo podatke zagnati zunaj Dockerja).
 
-1. Ustvari datoteko z nastavitvami: `cp .env.example .env` in v njej nastavi geslo baze (`POSTGRES_PASSWORD`), skrivnost za JWT (`JWT_SECRET`, najmanj 32 znakov, npr. `openssl rand -hex 32`) ter administratorski račun (`ADMIN_EMAIL`, `ADMIN_PASSWORD`). Datoteka `.env` je v `.gitignore` in se ne commita.
-2. Zaženi vse tri storitve: `docker compose up --build`
-3. Odpri aplikacijo na `http://localhost:18080`.
-4. Preveri backend: `curl http://localhost:18080/api/health` vrne `{"status":"ok"}`.
+1. Ustvari datoteko z nastavitvami: `cp .env.example .env` in jo izpolni (tabela spodaj). Datoteka `.env` je v `.gitignore` in se ne commita.
+2. Zgodovinske cenovne podatke (Parquet) shrani v mapo `data/` (poglavje »Zgodovinski podatki (Parquet)«). Brez njih aplikacija deluje, simulacije pa ni mogoče zagnati.
+3. Zaženi vse tri storitve: `docker compose up --build` (ali `-d` za ozadje).
+4. Odpri aplikacijo na `http://localhost:18080`.
+5. Preveri backend: `curl http://localhost:18080/api/health` vrne `{"status":"ok"}`.
+6. Neobvezno: naloži demo podatke (poglavje »Demo podatki«).
 
 Ustavitev: `docker compose down` (podatki baze ostanejo v volumnu `pgdata`, `docker compose down -v` jih izbriše).
 
 Če so vrata 18080 na tvojem računalniku zasedena, jih spremeni v `docker-compose.yml` (`ports` pri storitvi `frontend`).
+
+### Datoteka `.env`
+
+| Spremenljivka | Pomen |
+|---|---|
+| `POSTGRES_USER` | uporabnik baze, ki ga ustvari container `postgres` |
+| `POSTGRES_PASSWORD` | geslo baze (obvezno nastavi) |
+| `POSTGRES_DB` | ime baze |
+| `JWT_SECRET` | skrivnost za podpis seje, najmanj 32 znakov, npr. `openssl rand -hex 32`; brez nje backend ne zažene |
+| `ADMIN_EMAIL` | e-naslov administratorja, ki ga backend ob zagonu ustvari, če še ne obstaja |
+| `ADMIN_PASSWORD` | začetno geslo tega računa (izberi dobro geslo) |
+
+Skrivnosti nikoli ne daj v repozitorij; `.env.example` vsebuje samo imena in neškodljive vzorčne vrednosti.
+
+## Demo podatki
+
+Za predstavitev skripta `backend/scripts/seed-demo.ts` prek javnega API-ja (enako kot uporabnik v brskalniku) ustvari račune in teste:
+
+```
+cd backend
+npm run seed:demo                       # privzeto http://localhost:18080
+node scripts/seed-demo.ts http://localhost:18080
+```
+
+Zahteva delujoč stack in podatke v `data/`. Ustvari:
+
+| Račun | Vloga | Geslo |
+|---|---|---|
+| `demo.trader@example.com` | trader | `Demo-geslo-123` |
+| `demo.mentor@example.com` | mentor (aktivna povezava z demo trgovcem) | `Demo-geslo-123` |
+| administrator | admin | iz `.env` (`ADMIN_EMAIL`, `ADMIN_PASSWORD`) |
+
+Demo trgovec dobi šest testov, po enega v vsakem stanju: `draft`, `submitted`, `in_review`, `changes_requested` (z mentorjevim komentarjem, označenim kot napaka), `approved` in `withdrawn`. Skripta je idempotentna: če demo trgovec že ima teste, ne naredi ničesar. Če podatkov ni, ustvari račune in povezavo, nato pa se ustavi z jasnim sporočilom; test v `demoSeed.test.ts` pokriva oba primera.
 
 ## Baza in migracije
 
@@ -200,7 +235,7 @@ Telo `POST` (JSON): `name`, `source` (besedilo datoteke), neobvezno `description
 | `source` | obvezno, največ 100 KB (v bajtih), besedilo z `export default` (oblika v poglavju »Simulacija«), ki ga je mogoče razčleniti; sporočilo vsebuje razlog in vrstico |
 | `default_params` | neobvezno; JSON (besedilo ali objekt), ki je objekt z največ 20 parametri, vrednosti so število, besedilo ali `true`/`false` |
 
-Datoteka se pri nalaganju samo prevede (preverjanje sintakse), nikoli ne zažene; izvaja se šele v delavcu (poglavje »Izolirano izvajanje strategij«). Nova strategija je vedno `private` z lastnikom prijavljenega trgovca; deljenje ni del te funkcionalnosti, zato `PATCH` vidnosti in lastnika ne spreminja.
+Datoteka se pri nalaganju samo prevede (preverjanje sintakse), nikoli ne zažene; izvaja se šele v delavcu (poglavje »Izolirano izvajanje strategij«). Nova strategija je vedno `private` z lastnikom prijavljenega trgovca; `PATCH` lastnika ne spreminja, vidnost pa se spreminja samo s posebno potjo za deljenje (poglavje »Katalog strategij in deljenje strategij (API)«).
 
 `PATCH` spremeni samo podana polja z enakimi pravili. Urejanje in brisanje sme samo lastnik: tuja zasebna strategija vrne `404` (P1), vidna a tuja (sistemska ali deljena) pa `403`. Strategije, ki jo uporabljajo izvedeni testi, `DELETE` ne izbriše in vrne `409` z `{ "error": "...", "tests": N }`, kjer je `N` število testov. Urejanje takšne strategije je dovoljeno, shranjeni rezultati starih testov se ne spremenijo. Mentor in administrator dobita `403`.
 
@@ -447,6 +482,78 @@ Ko mentor zahteva spremembe (`changes_requested`), trgovec iz testa naredi ponov
 - Stran Administracija (administrator) ima zavihke **Venues**, **Prop plans**, **Instruments** in **Uporabniki** z istim vzorcem: iskanje, »+ Dodaj«, tabela in panel za urejanje (WF-06).
 - Referenčni podatki: ključ (id, oznaka) se po ustvarjanju ne spreminja; napake preverjanja se prikažejo ob poljih; zapis, ki ga uporablja test, ima onemogočen »Izbriši« s pojasnilom, v stolpcu Testi pa je število uporab.
 - Uporabniki: seznam (Ime, E-naslov, Vloga, Stanje) z iskanjem in paginacijo po 20; panel »Urejanje uporabnika« (Ime, Vloga, Blokiran) in »Nov račun«; razlog zavrnitve (npr. zadnji administrator, blokada sebe) se prikaže v panelu.
+
+## Pojasnila oznak P1, P3, P6, P7 in P8
+
+Dokument `docs/05-uporabniske-zgodbe.md` se v kriterijih sklicuje na pravila P1–P8, ki v njem niso posebej definirana. Tukaj je razlaga, kot je implementirana:
+
+| Oznaka | Pravilo | Kje v kodi |
+|---|---|---|
+| P1 | Skrite stvari ne obstajajo: strategija, test ali pregled, ki ga uporabnik ne sme videti, vrne `404` (ne `403`), tako da obstoj ni razkrit. Velja tudi za administratorja. Vidno, a prepovedano dejanje vrne `403`, napačno stanje pa `409`. | `visibleTo`, `viewableBy` v `backtestsApi.ts`, `strategies.ts` |
+| P3 | Seznami so paginirani po 20 vnosov na stran, odgovor vsebuje `page`, `pageSize`, `total` in `pages`. | `REVIEW_PAGE_SIZE`, `USERS_PAGE_SIZE`, seznami strategij in testov |
+| P6 | Napake simulacije ne razkrijejo notranjih podrobnosti (sledi sklada, poti); test, ki traja dlje kot 60 s ali sproži napako, se prekine in ne shrani. | `strategyWorker.ts`, poglavje »Izolirano izvajanje strategij« |
+| P7 | Datoteka strategije: ime 3–80 znakov, največ 100 KB, mora biti razčlenljiva; sporočilo napake vsebuje konkreten razlog in vrstico. | poglavje »Nalaganje lastnih strategij« |
+| P8 | Sprememba referenčnih podatkov (borza, načrt financiranega računa, instrument) ne vpliva na že shranjene rezultate: rezultati (metrike, posli, stroški, izid izziva) se izračunajo in shranijo ob zagonu, zapis, ki ga uporablja test, pa se ne izbriše. | poglavje »Vzdrževanje referenčnih podatkov (API)« |
+
+## Zasloni in wireframi
+
+Zasloni ustrezajo wireframom `docs/wireframes/WF-01..WF-06`. Ker so wireframi skica, so zavestne razlike naslednje:
+
+| Wireframe | Razlika v implementaciji |
+|---|---|
+| vsi | Brez globalnega iskanja, avatarja, izbire jezika, noge strani ter zavihkov »News« in »Portfolio« (zunaj obsega MVP). |
+| WF-01 Prijava/registracija | Prijava in registracija sta na ločenih zaslonih (`#prijava`, `#registracija`). |
+| WF-02 Nov test | Dodani so filtri strategij (Vse/Moje/Sistemske/Deljene) in sprotni povzetek izbire; načrt financiranega računa je neobvezen. |
+| WF-03 Rezultati | Primerjava se začne iz seznama zagonov (kljukice), ne iz strani rezultatov. |
+| WF-04 Mentor dashboard | Mentorjev odziv je spodnji razdelek strani pregleda. |
+| WF-05 Pregled testa | Komentarji in odločitev sta v enem razdelku pod rezultati. |
+| WF-06 Administracija | Zavihek »Database« je v meniju poimenovan »Referenčni podatki«; poleg tega je zavihek »Uporabniki«. |
+
+## Skladnost z ADR
+
+| ADR | Ugotovitev |
+|---|---|
+| 0001 Sklad | Skladno: Vite + TS, Node 24 + TS, PostgreSQL, DuckDB. |
+| 0002 PostgreSQL | Skladno: relacijski podatki v PostgreSQL z oštevilčenimi migracijami. |
+| 0003 Parquet | Skladno: cene so v Parquet datotekah, branje prek DuckDB, mapa `data/` je v containerju samo za branje. |
+| 0004 Tri storitve | Skladno: frontend (nginx), backend, baza; brskalnik govori samo z nginxom. |
+| 0005 Vloge na backendu | Skladno: vsaka pot je zavarovana z `guarded(roles, ...)`, frontend skrivanje menijev ni varnostni mehanizem. |
+| 0006 JWT v `httpOnly` | Skladno: žeton je v piškotku `HttpOnly; SameSite=Lax`. Odstopanje: backend ob vsakem zahtevku prebere uporabnika, vlogo in `blocked` iz baze (zahteva US-17), zato velja sprememba vloge ali blokada od naslednjega zahtevka. Posledica ADR, da preverjanje ne potrebuje poizvedbe v bazo, tu ne velja. |
+| 0007 Izvajalec brez dostopa do baze | Skladno: simulacija je čista funkcija; backend pripravi svečke in pravila, delavec (`strategyWorker.ts`) vrne samo rezultat. |
+| 0008 Izolirano izvajanje strategij | Skladno: strategija teče v delavcu z omejitvijo časa in pomnilnika; omejitve so v poglavju »Izolirano izvajanje strategij«. |
+
+## Preverjanje meril sprejemljivosti
+
+Merila iz `docs/05-uporabniske-zgodbe.md` so preverjena z avtomatskimi testi backenda (`backend/src/*.test.ts`) in z ročnim preizkusom zaslonov v brskalniku (Playwright skripta ni v repozitoriju).
+
+| Zgodba | Glavni testi |
+|---|---|
+| US-01 Registracija | `register.test.ts` |
+| US-02 Prijava, vloge | `login.test.ts`, `guards.test.ts`, `app.test.ts` |
+| US-03 Pregled strategij | `strategyCatalog.test.ts`, `strategies.test.ts` |
+| US-04 Nalaganje strategije | `strategyUpload.test.ts`, `strategiesCreate.test.ts`, `strategiesManage.test.ts`, `strategy.test.ts` |
+| US-05 Zagon testa | `backtestsApi.test.ts`, `backtestSchema.test.ts`, `candles.test.ts` |
+| US-06 Rezultati | `simulation.test.ts`, `backtest.test.ts` |
+| US-07 Stroški borze | `simulation.test.ts`, `reference.test.ts` |
+| US-08 Pravila financiranega računa | `propRules.test.ts` |
+| US-09 Primerjava | `backtestCompare.test.ts` |
+| US-10 Deljenje | `backtestSharing.test.ts`, `strategyCatalog.test.ts` |
+| US-11 Povezava mentor–trgovec | `mentorLinks.test.ts` |
+| US-12 Oddaja testa | `testStatus.test.ts`, `backtestReview.test.ts`, `retest.test.ts` |
+| US-13 Mentorjev dashboard | `mentorReview.test.ts`, `backtestAccess.test.ts` |
+| US-14 Komentarji in odločitev | `comments.test.ts` |
+| US-15 Analitika | `mentorAnalytics.test.ts` |
+| US-16 Referenčni podatki | `adminReference.test.ts`, `reference.test.ts` |
+| US-17 Uporabniški računi | `adminUsers.test.ts` |
+
+## Znana odstopanja in omejitve
+
+- Zneski načrta financiranega računa morajo biti večji od 0 (ne ≥ 0).
+- Sprememba vloge ali blokada uporabnika velja od njegovega naslednjega zahtevka (glej ADR 0006).
+- Obdobje v analitiki se določa po času zadnje oddaje testa.
+- Frontend nima avtomatskih testov v repozitoriju; zasloni so bili preverjeni ročno z brskalnikom.
+- Izolacija strategij ni popolna varnostna meja (ADR 0008).
+- Stanje projektne table (stolpci Done) vzdržuje ekipa ročno v GitHub Projects.
 
 ## Testiranje
 
