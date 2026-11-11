@@ -8,7 +8,7 @@ import { createBacktest, getBacktest, getTrades, listBacktests, rejectEdit, rete
 import type { CandleStore } from './candles.ts';
 import { COOKIE_NAME, readCookie, verifyToken } from './session.ts';
 import { acceptLink, declineLink, endLink, invite, listLinks } from './mentorLinks.ts';
-import { createStrategy, deleteStrategy, getStrategy, listStrategies, updateStrategy } from './strategies.ts';
+import { createStrategy, deleteStrategy, getStrategy, listStrategies, updateStrategy, listCatalog, setStrategyVisibility } from './strategies.ts';
 
 interface Deps {
   pool: Pool;
@@ -107,6 +107,13 @@ const routes: Record<string, Record<string, Route>> = {
       }
     }),
   },
+  '/api/strategy-catalog': {
+    GET: guarded(['trader'], async ({ pool, user }, req) => {
+      const query = new URL(req.url ?? '/', 'http://localhost').searchParams;
+      return listCatalog(pool, user!, query.get('source'), query.get('q'), query.get('page'));
+    }),
+  },
+  '/api/strategies/:id/visibility': { PUT: guarded(['trader'], async ({ pool, user, params }, req) => setStrategyVisibility(pool, user!, params.id!, await readJson(req))) },
   '/api/strategies/:id': {
     GET: guarded(ANY_ROLE, async ({ pool, user, params }) => getStrategy(pool, user!, params.id!)),
     PATCH: guarded(['trader'], async ({ pool, user, params }, req) => {
