@@ -427,6 +427,14 @@ Ko mentor zahteva spremembe (`changes_requested`), trgovec iz testa naredi ponov
 - Na mentorjevem dashboardu (panel »Skupna analitika učencev«): izbira obdobja (Zadnjih 30 dni, Zadnjih 90 dni, Vse; privzeto Vse), štiri skupne metrike (testi, odobreni, napake, povprečni največji padec) s povprečjem na učenca in tabela učencev.
 - Prazna stanja: brez aktivnih učencev »Ni aktivnih učencev …«, brez testov v obdobju »… še nimajo testov za analizo«; učenec brez testov ima namesto deleža in padca »–«, ne 0.
 
+### Vzdrževanje referenčnih podatkov (API)
+
+- Samo administrator (drugi `403`, neprijavljen `401`): `GET|POST /api/admin/{instruments,venues,prop-plans}` (seznam z iskanjem `?q=` in številom testov `used_by`, ustvarjanje) ter `PUT|DELETE /api/admin/<vrsta>/:ključ` (urejanje, brisanje). Trgovec in mentor še naprej berejo `/api/instruments`, `/api/venues` in `/api/prop-plans` za izbiro v obrazcih.
+- Ključ zapisa (`ticker` oziroma `id`) se določi ob ustvarjanju in se ne spreminja; podvojen ključ je `409`.
+- Preverjanje (`400` s polji): obvezna polja, `maker_pct` in `taker_pct` števili med 0 in 1 (delež vrednosti posla), zneski načrta (`account_size`, `max_daily_loss`, `max_total_loss`, `profit_target`) števila, večja od 0 (kot omejitve v bazi; ničelni znesek bi pokvaril simulacijo), skupina sredstva `crypto`, `forex`, `index` ali `gold`.
+- Brisanje zapisa, ki ga uporablja vsaj en test, vrne `409` s `tests` (število testov); sredstvu se ob brisanju izbrišejo tudi razponi (`spreads`), podatki Parquet ostanejo na disku.
+- Sprememba borze ali načrta ne spremeni že shranjenih rezultatov (P8): rezultat hrani vse zneske in izid preverjanja sam; ponovitev testa uporabi trenutne vrednosti.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:

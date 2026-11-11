@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { login, logout, register, type Result, type User } from './auth.ts';
 import { approveBacktest, requestChanges, startReview, submitBacktest, withdrawBacktest } from './backtestReview.ts';
 import { addComment, listComments } from './comments.ts';
+import { createReference, deleteReference, ENTITY_NAMES, listReference, updateReference, type EntityName } from './adminReference.ts';
 import { studentAnalytics } from './mentorAnalytics.ts';
 import { listReviewQueue, listStudents } from './mentorReview.ts';
 import { compareBacktests, createBacktest, getBacktest, getTrades, listBacktests, rejectEdit, retestBacktest, setBacktestVisibility } from './backtestsApi.ts';
@@ -167,6 +168,16 @@ const routes: Record<string, Record<string, Route>> = {
   '/api/mentor-links/:id/accept': { POST: guarded(['trader'], async ({ pool, user, params }) => acceptLink(pool, user!, params.id!)) },
   '/api/mentor-links/:id/decline': { POST: guarded(['trader'], async ({ pool, user, params }) => declineLink(pool, user!, params.id!)) },
   '/api/mentor-links/:id/end': { POST: guarded(['mentor', 'trader'], async ({ pool, user, params }) => endLink(pool, user!, params.id!)) },
+  ...Object.fromEntries(ENTITY_NAMES.flatMap((name: EntityName) => [
+    [`/api/admin/${name}`, {
+      GET: guarded(['admin'], async ({ pool }, req) => listReference(pool, name, new URL(req.url ?? '/', 'http://localhost').searchParams.get('q'))),
+      POST: guarded(['admin'], async ({ pool }, req) => createReference(pool, name, await readJson(req))),
+    }],
+    [`/api/admin/${name}/:key`, {
+      PUT: guarded(['admin'], async ({ pool, params }, req) => updateReference(pool, name, params.key!, await readJson(req))),
+      DELETE: guarded(['admin'], async ({ pool, params }) => deleteReference(pool, name, params.key!)),
+    }],
+  ])),
   '/api/admin/users': {
     GET: guarded(['admin'], select('SELECT id, email, name, role, blocked, created_at FROM users ORDER BY id')),
   },
