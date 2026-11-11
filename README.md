@@ -416,6 +416,12 @@ Ko mentor zahteva spremembe (`changes_requested`), trgovec iz testa naredi ponov
 - Stran `#backtests/primerjava/<id,id,...>`: tabela (strategija, parametri, sredstva, borza, obdobje, avtor, neto dobiček, donosnost, število poslov, delež zmag, največji padec, preverjanje računa) z oznako ★ pri najboljši vrednosti (največ pri dobičku, donosnosti, številu poslov in deležu zmag; najmanj pri padcu; pri enakih vrednostih brez oznake) in skupen graf krivulj z legendo.
 - Graf prikazuje donosnost v % glede na začetni kapital posameznega testa na skupni časovni osi, ker imajo testi lahko različen kapital in obdobje. Barve se razlikujejo tudi po vzorcu črte.
 
+### Analitika učencev (API)
+
+- `GET /api/mentor/students/analytics?period=all|30|90` (samo mentor, privzeto `all`; drugo je `400`): aktivni učenci mentorja z `tests`, `approved`, `approvedPct`, `mistakes` (komentarji z `is_mistake`) in `avgMaxDrawdownPct`, poleg tega `total` (vsote) in `average`.
+- Šteje samo testi, ki jih mentor sme videti (oddani in naprej, njegov pregled, aktivna povezava), torej brez osnutkov in umaknjenih. Obdobje se presoja po času zadnje oddaje testa.
+- `average`: testi in napake na učenca, delež odobrenih in največji padec pa so združeni čez vse teste (ne povprečje povprečij). Učenec brez testov ima `approvedPct` in `avgMaxDrawdownPct` enaka `null`; brez učencev je `average` enak `null`.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:

@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { login, logout, register, type Result, type User } from './auth.ts';
 import { approveBacktest, requestChanges, startReview, submitBacktest, withdrawBacktest } from './backtestReview.ts';
 import { addComment, listComments } from './comments.ts';
+import { studentAnalytics } from './mentorAnalytics.ts';
 import { listReviewQueue, listStudents } from './mentorReview.ts';
 import { compareBacktests, createBacktest, getBacktest, getTrades, listBacktests, rejectEdit, retestBacktest, setBacktestVisibility } from './backtestsApi.ts';
 import type { CandleStore } from './candles.ts';
@@ -152,6 +153,7 @@ const routes: Record<string, Record<string, Route>> = {
       getTrades(pool, user!, params.id!, new URL(req.url ?? '/', 'http://localhost').searchParams.get('page'))),
   },
   '/api/mentor/students': { GET: guarded(['mentor'], async ({ pool, user }) => listStudents(pool, user!)) },
+  '/api/mentor/students/analytics': { GET: guarded(['mentor'], async ({ pool, user }, req) => studentAnalytics(pool, user!, new URL(req.url ?? '/', 'http://localhost').searchParams.get('period'))) },
   '/api/mentor/backtests': {
     GET: guarded(['mentor'], async ({ pool, user }, req) => {
       const query = new URL(req.url ?? '/', 'http://localhost').searchParams;
