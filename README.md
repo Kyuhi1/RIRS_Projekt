@@ -328,6 +328,14 @@ Frontend (stran rezultatov `#backtests/<id>`, razdelek »Mentorski pregled«):
 - Prikazana sta mentor in zgodovina stanj (čas, prehod, uporabnik). Značka stanja je v glavi strani, stanje pa tudi v stolpcu »Stanje« v seznamu zagonov (`frontend/src/status.ts` hrani skupne nazive stanj).
 - Če se stanje medtem spremeni (`404`, `409`), je prikazan razlog, stran pa se po kratkem času osveži.
 
+### Mentorjev dostop do testov (samo branje)
+
+`GET /api/backtests/:id` in `GET /api/backtests/:id/trades` (US-13) lahko pokliče tudi mentor, vendar samo za teste, ki jih izpolnjeni vsi trije pogoji hkrati: test je bil oddan temu mentorju (`reviewer_id`), je v stanju `submitted`, `in_review`, `changes_requested` ali `approved` in je povezava z lastnikom testa `active`. Pogoj je v `visibleTo()` (`backend/src/backtestsApi.ts`) in velja za vse poti, ki berejo test.
+
+- Osnutki, umaknjeni testi, testi drugih trgovcev, testi, oddani drugemu mentorju, in testi učenca po prekinitvi povezave so za mentorja neobstoječi (`404`, P1).
+- Odgovor vsebuje še `owner` (`{ id, name }`, trgovec, ki je test naredil).
+- `PUT` in `PATCH` na `/api/backtests/:id` vrneta `403` (»Parametrov in rezultatov testa ni mogoče spreminjati«) za vsak viden test, tudi za lastnika, ker je izveden test nespremenljiv; za nevidni test `404`. Oddaja, umik in ustvarjanje testov ostanejo samo za trgovca (`403` za mentorja).
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:
