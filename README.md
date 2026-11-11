@@ -379,6 +379,32 @@ Ko mentor zahteva spremembe (`changes_requested`), trgovec iz testa naredi ponov
 - **Pogoji:** prvotni test mora biti v stanju `changes_requested` (sicer `409`) in ne sme biti že ponovljen (`409`, tudi pri sočasnih zahtevkih). Tuj ali neobstoječ test je `404`, mentor in administrator `403`.
 - **Odgovor:** vsak test vsebuje `previous_id` (test, iz katerega je nastal, ali `null`) in `next_id` (njegova ponovitev ali `null`); to velja tudi za seznam `GET /api/backtests`. Prvotni test ostane nespremenjen v stanju `changes_requested`; ponovitev se odda mentorju kot vsak osnutek.
 
+### Katalog strategij in deljenje strategij (API)
+
+| Pot | Vloga | Opis |
+|---|---|---|
+| `GET /api/strategy-catalog?source=&q=&page=` | trgovec | vidne strategije po izvoru, z iskanjem in paginacijo: `{ source, q, page, pageSize, total, pages, items: [{ id, name, description, visibility, system, mine, author }] }` |
+| `PUT /api/strategies/:id/visibility` | trgovec (lastnik) | `{ "visibility": "private" \| "shared" }`; vrne strategijo |
+
+- **Katalog** (US-03) vrne sistemske strategije (`author` je »Sistem«), lastne in tuje strategije z vidnostjo `shared`; tuje zasebne strategije so nevidne (P1). Izvor: `all` (privzeto), `mine`, `system`, `shared` (strategije uporabnikov z vidnostjo `shared`, sistemske ne). Po imenu se išče od 3 znakov (krajše besedilo se prezre; velikost črk ni pomembna, `%` in `_` sta navadna znaka). Strani imajo po 20 strategij, stran za zadnjo je veljavna in vrne prazen seznam. Katalog ne vrača izvorne kode. Stari `GET /api/strategies` ostane polni seznam za izbiro strategije pri novem testu.
+- **Deljenje** (US-10): vidnost preklopi samo lastnik (tuja zasebna strategija je `404`, vidna a tuja ali sistemska `403`, neveljavna vrednost `400`). Deljena strategija je takoj vidna drugim trgovcem, ki jo lahko izberejo za svoj test, ne morejo pa je urejati ali brisati (`403`). Ob vrnitvi na `private` takoj izgine iz njihovih seznamov, že izvedeni testi drugih (`strategy_id` ostane) pa ostanejo njihovi. Nova strategija je vedno `private`.
+
+### Deljenje testov (API)
+
+| Pot | Vloga | Opis |
+|---|---|---|
+| `PUT /api/backtests/:id/visibility` | trgovec (lastnik) | `{ "visibility": "private" \| "shared" }`; vrne test |
+| `GET /api/backtests?scope=shared` | trgovec | testi drugih trgovcev z vidnostjo `shared`, najnovejši prvi (privzeti `scope=mine` so lastni testi) |
+
+- **Dostop:** deljeni test sme vsak trgovec brati (`GET /api/backtests/:id`, `/trades`), a samo za branje: `PUT`/`PATCH` na test vrneta `403`, oddaja, umik, ponovitev, komentarji in preklop vidnosti ostanejo lastniku (`404`, pri preklopu vidnosti `403`). Pri tujem testu so mentor, zgodovina stanj in povezave med testi (`previous_id`, `next_id`) skriti. Ob vrnitvi na `private` test takoj izgine iz seznamov in dostopa drugih (`404`). Nov test je vedno `private`.
+- **Mentorji** deljenih testov ne vidijo prek seznama; mentor test še vedno vidi samo po pravilih pregleda (oddan njemu, aktiven učenec). Deljenje testa mentorju ne odpre testov tujih učencev. Administrator nima dostopa.
+
+### Pregled in deljenje (frontend)
+
+- **Strategije:** seznam uporablja katalog (`/api/strategy-catalog`): filtri Vse / Moje / Sistemske / Deljene, iskanje po imenu od 3 znakov, paginacija po 20, prazno stanje »Ni strategij« s povezavo na nalaganje nove strategije. Lastne vrstice imajo gumb **Deli** / **Prekliči deljenje** z dvostopenjsko potrditvijo; tuje deljene strategije so brez Uredi/Izbriši.
+- **Rezultat testa:** lastnik vidi značko vidnosti in gumb Deli; tuj deljen test se odpre samo za branje (opomba »Deljeni test uporabnika …«, brez mentorskega pregleda in odziva).
+- **Zagoni:** zavihka »Moji zagoni« in »Deljeni zagoni« (tuji zagoni z avtorjem); stolpec Vidnost pri lastnih. Ob vrnitvi na zasebno deljeni zagon takoj izgine iz tujih seznamov.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:

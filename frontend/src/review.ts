@@ -1,6 +1,7 @@
 import { errorMessage, getJson, postJson } from './api';
 import { statusLabel, when } from './status';
 import type { Role } from './session';
+import { button, confirmButton } from './ui';
 
 export interface HistoryEntry {
   from_status: string;
@@ -21,22 +22,6 @@ function make<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string,
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
-}
-
-function button(label: string, onClick: () => void): HTMLButtonElement {
-  const node = make('button', undefined, label);
-  node.type = 'button';
-  node.addEventListener('click', onClick);
-  return node;
-}
-
-// Umik oddaje je dvostopenjski: prvi klik pokaže »Potrdi« in »Prekliči«.
-function confirmButton(label: string, confirmLabel: string, run: () => void): HTMLElement {
-  const holder = make('span', 'actions');
-  const show = () => holder.replaceChildren(button(label, ask));
-  const ask = () => holder.replaceChildren(button(confirmLabel, run), button('Prekliči', show));
-  show();
-  return holder;
 }
 
 // Ali ima trgovec aktivnega mentorja; null pomeni potekla seja (401), false tudi napako pri nalaganju.

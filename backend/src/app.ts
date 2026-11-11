@@ -4,11 +4,11 @@ import { login, logout, register, type Result, type User } from './auth.ts';
 import { approveBacktest, requestChanges, startReview, submitBacktest, withdrawBacktest } from './backtestReview.ts';
 import { addComment, listComments } from './comments.ts';
 import { listReviewQueue, listStudents } from './mentorReview.ts';
-import { createBacktest, getBacktest, getTrades, listBacktests, rejectEdit, retestBacktest } from './backtestsApi.ts';
+import { createBacktest, getBacktest, getTrades, listBacktests, rejectEdit, retestBacktest, setBacktestVisibility } from './backtestsApi.ts';
 import type { CandleStore } from './candles.ts';
 import { COOKIE_NAME, readCookie, verifyToken } from './session.ts';
 import { acceptLink, declineLink, endLink, invite, listLinks } from './mentorLinks.ts';
-import { createStrategy, deleteStrategy, getStrategy, listStrategies, updateStrategy } from './strategies.ts';
+import { createStrategy, deleteStrategy, getStrategy, listStrategies, updateStrategy, listCatalog, setStrategyVisibility } from './strategies.ts';
 
 interface Deps {
   pool: Pool;
@@ -107,6 +107,13 @@ const routes: Record<string, Record<string, Route>> = {
       }
     }),
   },
+  '/api/strategy-catalog': {
+    GET: guarded(['trader'], async ({ pool, user }, req) => {
+      const query = new URL(req.url ?? '/', 'http://localhost').searchParams;
+      return listCatalog(pool, user!, query.get('source'), query.get('q'), query.get('page'));
+    }),
+  },
+  '/api/strategies/:id/visibility': { PUT: guarded(['trader'], async ({ pool, user, params }, req) => setStrategyVisibility(pool, user!, params.id!, await readJson(req))) },
   '/api/strategies/:id': {
     GET: guarded(ANY_ROLE, async ({ pool, user, params }) => getStrategy(pool, user!, params.id!)),
     PATCH: guarded(['trader'], async ({ pool, user, params }, req) => {
@@ -120,7 +127,7 @@ const routes: Record<string, Record<string, Route>> = {
     DELETE: guarded(['trader'], async ({ pool, user, params }) => deleteStrategy(pool, user!, params.id!)),
   },
   '/api/backtests': {
-    GET: guarded(['trader'], async ({ pool, user }) => listBacktests(pool, user!)),
+    GET: guarded(['trader'], async ({ pool, user }, req) => listBacktests(pool, user!, new URL(req.url ?? '/', 'http://localhost').searchParams.get('scope'))),
     POST: guarded(['trader'], async ({ pool, store, user }, req) => createBacktest(pool, store, user!, await readJson(req))),
   },
   '/api/backtests/:id': {
@@ -128,6 +135,7 @@ const routes: Record<string, Record<string, Route>> = {
     PUT: guarded(['trader', 'mentor'], async ({ pool, user, params }) => rejectEdit(pool, user!, params.id!)),
     PATCH: guarded(['trader', 'mentor'], async ({ pool, user, params }) => rejectEdit(pool, user!, params.id!)),
   },
+  '/api/backtests/:id/visibility': { PUT: guarded(['trader'], async ({ pool, user, params }, req) => setBacktestVisibility(pool, user!, params.id!, await readJson(req))) },
   '/api/backtests/:id/submit': { POST: guarded(['trader'], async ({ pool, user, params }) => submitBacktest(pool, user!, params.id!)) },
   '/api/backtests/:id/withdraw': { POST: guarded(['trader'], async ({ pool, user, params }) => withdrawBacktest(pool, user!, params.id!)) },
   '/api/backtests/:id/retest': { POST: guarded(['trader'], async ({ pool, store, user, params }) => retestBacktest(pool, store, user!, params.id!)) },

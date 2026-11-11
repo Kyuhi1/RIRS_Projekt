@@ -26,6 +26,48 @@ export async function listStrategies(pool: Pool, user: User): Promise<Result> {
   return { status: 200, body: rows.map(present) };
 }
 
+export const CATALOG_PAGE_SIZE = 20;
+export const SEARCH_MIN_LENGTH = 3;
+export const SOURCES = ['all', 'mine', 'system', 'shared'] as const;
+
+// Pogoj za izvor: Moje (lastnik sem jaz), Sistemske (brez lastnika), Deljene (strategije uporabnikov z vidnostjo shared).
+const SOURCE_FILTERS: Record<(typeof SOURCES)[number], string> = {
+  all: 'TRUE',
+  mine: 's.owner_id = $1',
+  system: 's.owner_id IS NULL',
+  shared: "(s.owner_id IS NOT NULL AND s.visibility = 'shared')",
+};
+
+// Katalog strategij (US-03): vidne strategije po izvoru, z iskanjem po imenu in paginacijo po 20. Iskanje se uporabi
+// šele pri vsaj 3 znakih (krajše besedilo se prezre); % in _ v iskalnem nizu sta navadna znaka.
+export async function listCatalog(pool: Pool, user: User, source: string | null, query: string | null, page: string | null): Promise<Result> {
+  const wanted = source ?? 'all';
+  if (!(SOURCES as readonly string[]).includes(wanted)) {
+    return { status: 400, body: { errors: { source: 'Izvor mora biti all, mine, system ali shared' } } };
+  }
+  if (page !== null && !/^[1-9]\d{0,8}$/.test(page)) return { status: 400, body: { errors: { page: 'Stran mora biti celo število od 1 naprej' } } };
+  const number = page === null ? 1 : Number(page);
+  const text = (query ?? '').trim();
+  const search = [...text].length >= SEARCH_MIN_LENGTH ? text : null;
+
+  const values: unknown[] = [user.id];
+  let where = `${VISIBLE} AND ${SOURCE_FILTERS[wanted as (typeof SOURCES)[number]]}`;
+  if (search !== null) {
+    values.push(`%${search.replace(/[\\%_]/g, '\\$&')}%`);
+    where += ` AND s.name ILIKE $${values.length}`;
+  }
+  const total = (await pool.query(`SELECT count(*)::int AS n ${FROM} WHERE ${where}`, values)).rows[0].n as number;
+  values.push((number - 1) * CATALOG_PAGE_SIZE, CATALOG_PAGE_SIZE);
+  const { rows } = await pool.query<Row>(
+    `SELECT ${COLUMNS} ${FROM} WHERE ${where} ORDER BY s.owner_id IS NOT NULL, s.id OFFSET $${values.length - 1} LIMIT $${values.length}`,
+    values,
+  );
+  return {
+    status: 200,
+    body: { source: wanted, q: search ?? '', page: number, pageSize: CATALOG_PAGE_SIZE, total, pages: Math.max(1, Math.ceil(total / CATALOG_PAGE_SIZE)), items: rows.map(present) },
+  };
+}
+
 export async function getStrategy(pool: Pool, user: User, id: string, status = 200): Promise<Result> {
   const notFound: Result = { status: 404, body: { error: 'Strategija ne obstaja' } };
   if (!/^\d{1,15}$/.test(id)) return notFound;
@@ -117,4 +159,16 @@ export async function deleteStrategy(pool: Pool, user: User, id: string): Promis
     throw err;
   }
   return { status: 200, body: { id: Number(owned.id) } };
+}
+
+// Lastnik preklopi vidnost strategije med private in shared (US-10). Deljena strategija je takoj vidna drugim
+// trgovcem, ob vrnitvi na private pa takoj izgine iz njihovih seznamov; testi, ki so jih drugi že izvedli, ostanejo
+// njihovi. Tuja zasebna strategija je 404, vidna a tuja (sistemska ali deljena) 403.
+export async function setStrategyVisibility(pool: Pool, user: User, id: string, input: unknown): Promise<Result> {
+  const owned = await ownedBy(pool, user, id);
+  if (isResult(owned)) return owned;
+  const visibility = input && typeof input === 'object' ? (input as Record<string, unknown>).visibility : undefined;
+  if (visibility !== 'private' && visibility !== 'shared') return { status: 400, body: { errors: { visibility: 'Vidnost mora biti private ali shared' } } };
+  await pool.query('UPDATE strategies SET visibility = $2 WHERE id = $1', [owned.id, visibility]);
+  return getStrategy(pool, user, owned.id);
 }

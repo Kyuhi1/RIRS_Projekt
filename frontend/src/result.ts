@@ -3,7 +3,8 @@ import { renderEquityChart, type EquityPoint, type Marker } from './equityChart'
 import { renderComments } from './comments';
 import { renderFeedback } from './feedback';
 import { renderReview, type HistoryEntry } from './review';
-import type { Role } from './session';
+import { fetchCurrentUser, type Role } from './session';
+import { VISIBILITY_LABELS, visibilityControl } from './ui';
 import { statusLabel } from './status';
 import { renderTrades } from './trades';
 
@@ -115,8 +116,8 @@ function rulesSection(challenge: Challenge): HTMLElement {
 // Stran rezultatov testa (WF-03): glava z nastavitvami, metrike, krivulja, stroški, pravila in posli.
 export async function renderResult(container: HTMLElement, id: string, onUnauthorized: () => void, role: Role = 'trader'): Promise<void> {
   container.innerHTML = '<p>Nalagam ...</p>';
-  const [detail, venues] = await Promise.all([getJson(`/api/backtests/${encodeURIComponent(id)}`), getJson('/api/venues')]);
-  if (detail.status === 401 || venues.status === 401) return onUnauthorized();
+  const [detail, venues, me] = await Promise.all([getJson(`/api/backtests/${encodeURIComponent(id)}`), getJson('/api/venues'), role === 'trader' ? fetchCurrentUser() : Promise.resolve(null)]);
+  if (detail.status === 401 || venues.status === 401 || (role === 'trader' && me === null)) return onUnauthorized();
 
   container.replaceChildren();
   const back = make('p');
@@ -130,6 +131,7 @@ export async function renderResult(container: HTMLElement, id: string, onUnautho
   }
 
   const t = detail.data as BacktestDetail;
+  const foreign = role === 'trader' && t.owner.id !== me!.id; // deljeni test drugega trgovca (samo za branje)
   const r = t.results;
   const venue = venues.status === 200 ? (venues.data as Venue[]).find((v) => v.id === t.venue_id) : undefined;
   const venueName = venue?.name ?? t.venue_id;
@@ -231,15 +233,25 @@ export async function renderResult(container: HTMLElement, id: string, onUnautho
     layout.append(left, right);
     container.append(header, lock, layout);
     pending.push(renderComments(commentsBox, t.id, t.status, 'mentor', reload, onUnauthorized));
+  } else if (foreign) {
+    const note = make('p', 'readonly-note', `Deljeni test uporabnika ${t.owner.name}: samo za branje.`);
+    container.append(header, note, metrics, settings, chart, cards, trades);
   } else {
+    // Lastnik: vidnost testa (Deli / Prekliči deljenje s potrditvijo) in razdelka Mentorski pregled, Mentorjev odziv.
+    const shareMessage = make('p', 'error');
+    shareMessage.setAttribute('role', 'alert');
+    header.append(
+      make('span', 'badge', VISIBILITY_LABELS[t.visibility]),
+      visibilityControl(`/api/backtests/${t.id}/visibility`, t.visibility, reload, (text) => (shareMessage.textContent = text), onUnauthorized),
+    );
     const review = section('Mentorski pregled', reviewBox);
-    container.append(header, metrics, review, settings, chart, cards, trades);
+    container.append(header, shareMessage, metrics, review, settings, chart, cards, trades);
     // Mentorjev odziv: stanje, komentarji samo za branje in »Ponovi test«; razdelek se pokaže, ko je test oddan.
     if (t.status !== 'draft') {
       container.append(section('Mentorjev odziv', commentsBox));
       pending.push(renderFeedback(commentsBox, t, reload, onUnauthorized));
     }
   }
-  pending.push(renderReview(reviewBox, t, reload, onUnauthorized, role));
+  if (!foreign) pending.push(renderReview(reviewBox, t, reload, onUnauthorized, role));
   await Promise.all(pending);
 }
