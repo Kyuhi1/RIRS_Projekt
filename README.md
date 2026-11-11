@@ -303,6 +303,24 @@ Frontend:
 - **Stran Mentor trgovca** (`#mentor`): trenutni mentor z gumbom »Prekini povezavo« (s potrditvijo) in čakajoča vabila z imenom mentorja ter gumboma »Sprejmi« in »Zavrni«. Če trgovec že ima aktivnega mentorja, je ob sprejemu drugega vabila prikazano »Že imate aktivnega mentorja«.
 - Po vsakem dejanju se stran osveži; če se je stanje povezave medtem spremenilo (`404`, `409`), je prikazan razlog, vsebina pa se po kratkem času osveži.
 
+## Oddaja testa v mentorski pregled
+
+Trgovec test, ki je v stanju `draft`, odda svojemu aktivnemu mentorju (US-12). Stanja testa: `draft`, `submitted`, `in_review`, `changes_requested`, `approved`, `withdrawn`. Dovoljene prehode določa čista funkcija `transition()` v `backend/src/testStatus.ts`; trenutno se uporabljata `submit` (`draft` → `submitted`) in `withdraw` (`submitted` → `withdrawn`), ostale prehode (pregled) doda naloga za mentorski pregled. Migracija `010_status_history.sql` doda `backtests.reviewer_id` in tabelo `status_history`.
+
+| Pot | Vloga | Opis |
+|---|---|---|
+| `POST /api/backtests/:id/submit` | trgovec | odda osnutek aktivnemu mentorju; `reviewer_id` postane mentor |
+| `POST /api/backtests/:id/withdraw` | trgovec | umakne oddajo, dokler je test `submitted` |
+
+Odgovor obeh poti je test kot pri `GET /api/backtests/:id`, ki zdaj vsebuje še `reviewer` (`{ id, name }` ali `null`) in `history` (seznam `{ from_status, to_status, changed_at, changed_by: { id, name } }` od najstarejšega prehoda). Seznam `GET /api/backtests` vsebuje `status` in `reviewer`.
+
+Pravila:
+
+- **Mentor:** oddaja brez aktivne povezave je zavrnjena (`409`), test ostane osnutek.
+- **Umik:** mogoč samo v stanju `submitted`; ko mentor pregled začne (`in_review`), umik vrne `409`. Umaknjenega testa ni mogoče znova oddati (zgodbe ponovne oddaje ne določajo); za popravke trgovec izvede nov test.
+- **Zgodovina:** vsak prehod se zapiše v `status_history` (od, v, uporabnik, čas) v isti transakciji kot sprememba stanja. Vrstica testa se pred spremembo zaklene (`FOR UPDATE`), zato sočasna zahtevka ne podvojita prehoda.
+- **Dostop:** tuj ali neobstoječ test je `404`, mentor `403`, neprijavljen `401`, napačno stanje `409`.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:
