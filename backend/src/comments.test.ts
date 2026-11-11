@@ -189,7 +189,7 @@ test('odločitev je mogoča samo med pregledom, samo za vidne teste in samo za m
   });
 });
 
-test('komentar in sočasna odobritev: po odobritvi komentar ni shranjen, test ima dosleden komentar-stanje', async () => {
+test('komentar in sočasna odobritev: vsak uspešen komentar je shranjen, zavrnjeni (409) niso, po odobritvi ni novih', async () => {
   await withApp(async (base, pool) => {
     const { cookie, make, comment, count } = await setup(base, pool);
     const test = await make('t1', 'in_review');
@@ -197,13 +197,14 @@ test('komentar in sočasna odobritev: po odobritvi komentar ni shranjen, test im
       ...Array.from({ length: 5 }, (_, i) => comment('m1', test, `komentar ${i}`)),
       send(base, 'POST', `/api/backtests/${test}/approve`, cookie.m1),
     ]);
-    const approved = results[5]!;
-    assert.equal(approved.status, 200);
+    assert.equal(results[5]!.status, 200);
+    const attempts = results.slice(0, 5);
+    assert.ok(attempts.every((r) => r.status === 201 || r.status === 409));
+    // Zaklenjena vrstica testa: komentar je ali shranjen pred odobritvijo (201) ali zavrnjen po njej (409).
+    // Časov ne primerjamo, ker now() v transakciji pomeni njen začetek, ne commita.
     const stored = await count(test);
-    assert.equal(results.slice(0, 5).filter((r) => r.status === 201).length, stored); // vsak uspešen komentar je shranjen, ostali so 409
-    assert.ok(results.slice(0, 5).every((r) => r.status === 201 || r.status === 409));
-    const lastComment = (await pool.query('SELECT max(created_at) AS t FROM comments WHERE backtest_id = $1', [test])).rows[0].t;
-    const approvedAt = (await pool.query("SELECT changed_at AS t FROM status_history WHERE backtest_id = $1 AND to_status = 'approved'", [test])).rows[0].t;
-    if (stored > 0) assert.ok(lastComment <= approvedAt, 'noben komentar ni nastal po odobritvi');
+    assert.equal(attempts.filter((r) => r.status === 201).length, stored);
+    assert.equal((await comment('m1', test, 'prepozno')).status, 409);
+    assert.equal(await count(test), stored);
   });
 });
