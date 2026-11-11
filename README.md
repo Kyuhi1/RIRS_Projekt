@@ -321,6 +321,13 @@ Pravila:
 - **Zgodovina:** vsak prehod se zapiše v `status_history` (od, v, uporabnik, čas) v isti transakciji kot sprememba stanja. Vrstica testa se pred spremembo zaklene (`FOR UPDATE`), zato sočasna zahtevka ne podvojita prehoda.
 - **Dostop:** tuj ali neobstoječ test je `404`, mentor `403`, neprijavljen `401`, napačno stanje `409`.
 
+Frontend (stran rezultatov `#backtests/<id>`, razdelek »Mentorski pregled«):
+
+- **Osnutek:** gumb »Oddaj mentorju« je aktiven samo, če ima trgovec aktivno povezavo z mentorjem (preverjeno prek `GET /api/mentor-links`). Sicer je onemogočen, ob njem pa piše »Najprej se poveži z mentorjem« s povezavo na stran Mentor.
+- **Oddan:** gumb »Umakni oddajo« z dvostopenjsko potrditvijo. V stanju »V pregledu« gumba ni, prikazano je pojasnilo.
+- Prikazana sta mentor in zgodovina stanj (čas, prehod, uporabnik). Značka stanja je v glavi strani, stanje pa tudi v stolpcu »Stanje« v seznamu zagonov (`frontend/src/status.ts` hrani skupne nazive stanj).
+- Če se stanje medtem spremeni (`404`, `409`), je prikazan razlog, stran pa se po kratkem času osveži.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:
