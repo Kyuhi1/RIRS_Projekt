@@ -442,6 +442,12 @@ Ko mentor zahteva spremembe (`changes_requested`), trgovec iz testa naredi ponov
 - Zaščite (`409` z razlogom): administrator ne more blokirati samega sebe, zadnjemu aktivnemu administratorju se vloga ne odvzame in ga ni mogoče blokirati. Administratorji se pri tem zaklenejo v stalnem vrstnem redu, zato dva sočasna odvzema ne moreta oba uspeti.
 - Administrator ne vidi zasebnih strategij (`404`) in nima dostopa do testov (`403`).
 
+### Administracija (frontend)
+
+- Stran Administracija (administrator) ima zavihke **Venues**, **Prop plans**, **Instruments** in **Uporabniki** z istim vzorcem: iskanje, »+ Dodaj«, tabela in panel za urejanje (WF-06).
+- Referenčni podatki: ključ (id, oznaka) se po ustvarjanju ne spreminja; napake preverjanja se prikažejo ob poljih; zapis, ki ga uporablja test, ima onemogočen »Izbriši« s pojasnilom, v stolpcu Testi pa je število uporab.
+- Uporabniki: seznam (Ime, E-naslov, Vloga, Stanje) z iskanjem in paginacijo po 20; panel »Urejanje uporabnika« (Ime, Vloga, Blokiran) in »Nov račun«; razlog zavrnitve (npr. zadnji administrator, blokada sebe) se prikaže v panelu.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:
