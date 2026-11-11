@@ -1,6 +1,7 @@
 import { errorMessage, getJson } from './api';
 import { renderEquityChart, type EquityPoint, type Marker } from './equityChart';
 import { renderComments } from './comments';
+import { renderFeedback } from './feedback';
 import { renderReview, type HistoryEntry } from './review';
 import type { Role } from './session';
 import { statusLabel } from './status';
@@ -36,6 +37,8 @@ interface BacktestDetail {
   prop_plan: { id: string; firm_name: string; plan_name: string } | null;
   status: string;
   visibility: 'private' | 'shared';
+  previous_id: number | null;
+  next_id: number | null;
   reviewer: { id: number; name: string } | null;
   owner: { id: number; name: string };
   history: HistoryEntry[];
@@ -133,6 +136,11 @@ export async function renderResult(container: HTMLElement, id: string, onUnautho
 
   const header = make('header', 'result-head');
   header.append(make('h2', undefined, `Zagon #${t.id}: ${t.strategy_name}`), make('span', 'badge', statusLabel(t.status)));
+  if (t.previous_id !== null) {
+    const origin = make('a', undefined, `Ponovitev testa #${t.previous_id}`);
+    origin.href = role === 'mentor' ? `#pregled/${t.previous_id}` : `#backtests/${t.previous_id}`;
+    header.append(origin);
+  }
 
   const metrics = make('div', 'metrics');
   metrics.append(
@@ -226,10 +234,10 @@ export async function renderResult(container: HTMLElement, id: string, onUnautho
   } else {
     const review = section('Mentorski pregled', reviewBox);
     container.append(header, metrics, review, settings, chart, cards, trades);
-    // Trgovec komentarje mentorja samo bere; razdelek se pokaže, ko je test oddan.
+    // Mentorjev odziv: stanje, komentarji samo za branje in »Ponovi test«; razdelek se pokaže, ko je test oddan.
     if (t.status !== 'draft') {
-      container.append(section('Komentarji mentorja', commentsBox));
-      pending.push(renderComments(commentsBox, t.id, t.status, 'trader', reload, onUnauthorized));
+      container.append(section('Mentorjev odziv', commentsBox));
+      pending.push(renderFeedback(commentsBox, t, reload, onUnauthorized));
     }
   }
   pending.push(renderReview(reviewBox, t, reload, onUnauthorized, role));

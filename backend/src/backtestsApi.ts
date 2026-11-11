@@ -7,7 +7,8 @@ const SELECT = `
   SELECT b.id, b.strategy_id, s.name AS strategy_name, b.venue_id,
          ARRAY(SELECT ticker FROM backtest_instruments WHERE backtest_id = b.id ORDER BY ticker) AS instruments,
          to_char(b.period_from, 'YYYY-MM-DD') AS "from", to_char(b.period_to, 'YYYY-MM-DD') AS "to",
-         b.params, b.status, b.visibility, b.created_at, b.challenge_passed,
+         b.params, b.status, b.visibility, b.created_at, b.challenge_passed, b.previous_id,
+         (SELECT n.id FROM backtests n WHERE n.previous_id = b.id) AS next_id,
          (SELECT jsonb_build_object('id', u.id::int, 'name', u.name) FROM users u WHERE u.id = b.reviewer_id) AS reviewer,
          (SELECT jsonb_build_object('id', o.id::int, 'name', o.name) FROM users o WHERE o.id = b.owner_id) AS owner,
          CASE WHEN pp.id IS NULL THEN NULL ELSE jsonb_build_object('id', pp.id, 'firm_name', pp.firm_name, 'plan_name', pp.plan_name,
@@ -25,23 +26,27 @@ export const visibleTo = (user: User, param = 2): string =>
 
 const FROM = 'FROM backtests b JOIN strategies s ON s.id = b.strategy_id LEFT JOIN prop_plans pp ON pp.id = b.prop_plan_id';
 
-const withId = <T extends { id: string; strategy_id: string }>({ id, strategy_id, ...rest }: T) => ({
+const asNumber = (value: string | null) => (value === null ? null : Number(value));
+
+const withId = <T extends { id: string; strategy_id: string; previous_id: string | null; next_id: string | null }>({ id, strategy_id, previous_id, next_id, ...rest }: T) => ({
   id: Number(id),
   strategy_id: Number(strategy_id),
+  previous_id: asNumber(previous_id),
+  next_id: asNumber(next_id),
   ...rest,
 });
 
 // Izračuna test in ga šele ob uspehu shrani v stanju draft (skupaj s sredstvi, v eni transakciji).
-export async function createBacktest(pool: Pool, store: CandleStore, user: User, input: unknown): Promise<Result> {
+export async function createBacktest(pool: Pool, store: CandleStore, user: User, input: unknown, previousId: string | null = null): Promise<Result> {
   try {
     const test = await computeBacktest(pool, store, user, input);
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       const { rows } = await client.query(
-        `INSERT INTO backtests (owner_id, strategy_id, venue_id, period_from, period_to, params, results, prop_plan_id, challenge_passed)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-        [user.id, test.strategyId, test.venueId, test.from, test.to, test.params, test.results, test.propPlanId, test.challengePassed],
+        `INSERT INTO backtests (owner_id, strategy_id, venue_id, period_from, period_to, params, results, prop_plan_id, challenge_passed, previous_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+        [user.id, test.strategyId, test.venueId, test.from, test.to, test.params, test.results, test.propPlanId, test.challengePassed, previousId],
       );
       const id = rows[0].id as string;
       await client.query('INSERT INTO backtest_instruments (backtest_id, ticker) SELECT $1, unnest($2::text[])', [id, test.instruments]);
@@ -111,4 +116,41 @@ export async function rejectEdit(pool: Pool, user: User, id: string): Promise<Re
   const { rowCount } = await pool.query(`SELECT 1 FROM backtests b WHERE b.id = $1 AND ${visibleTo(user)}`, [id, user.id]);
   if (!rowCount) return { status: 404, body: { error: 'Test ne obstaja' } };
   return { status: 403, body: { error: 'Parametrov in rezultatov testa ni mogoče spreminjati' } };
+}
+
+const ALREADY_RETESTED: Result = { status: 409, body: { error: 'Ta test je že bil ponovljen' } };
+
+// »Ponovi test« (US-12): iz testa s zahtevanimi spremembami (changes_requested) nastane nov test z istimi
+// nastavitvami (strategija, parametri, sredstva, borza, obdobje, načrt), ki se izračuna znova s trenutno
+// strategijo in podatki. Nov test je osnutek in kaže na prejšnjega (`previous_id`); iz enega testa nastane
+// največ ena ponovitev. Samo lastnik; tuj ali neobstoječ test je 404, test v drugem stanju 409.
+export async function retestBacktest(pool: Pool, store: CandleStore, user: User, id: string): Promise<Result> {
+  if (!/^\d{1,15}$/.test(id)) return { status: 404, body: { error: 'Test ne obstaja' } };
+  const { rows } = await pool.query(
+    `SELECT b.id, b.status, b.strategy_id::int AS strategy_id, b.venue_id, b.params, b.prop_plan_id,
+            to_char(b.period_from, 'YYYY-MM-DD') AS "from", to_char(b.period_to, 'YYYY-MM-DD') AS "to",
+            ARRAY(SELECT ticker FROM backtest_instruments WHERE backtest_id = b.id ORDER BY ticker) AS instruments,
+            EXISTS (SELECT 1 FROM backtests n WHERE n.previous_id = b.id) AS retested
+     FROM backtests b WHERE b.id = $1 AND ${visibleTo(user)}`,
+    [id, user.id],
+  );
+  const original = rows[0];
+  if (!original) return { status: 404, body: { error: 'Test ne obstaja' } };
+  if (original.status !== 'changes_requested') return { status: 409, body: { error: 'Ponoviti je mogoče samo test, pri katerem je mentor zahteval spremembe' } };
+  if (original.retested) return ALREADY_RETESTED;
+  const input = {
+    strategy_id: original.strategy_id,
+    params: original.params,
+    instruments: original.instruments,
+    venue_id: original.venue_id,
+    from: original.from,
+    to: original.to,
+    prop_plan_id: original.prop_plan_id,
+  };
+  try {
+    return await createBacktest(pool, store, user, input, id);
+  } catch (err) {
+    if ((err as { code?: string }).code === '23505') return ALREADY_RETESTED; // sočasna ponovitev istega testa
+    throw err;
+  }
 }

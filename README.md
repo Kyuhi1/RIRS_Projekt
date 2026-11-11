@@ -304,7 +304,7 @@ Frontend:
 - Po vsakem dejanju se stran osveži; če se je stanje povezave medtem spremenilo (`404`, `409`), je prikazan razlog, vsebina pa se po kratkem času osveži.
 - **Mentorjev pogled testa** (`#pregled/<id>`): ista stran rezultatov kot pri trgovcu, samo za branje. Razdelek »Mentorski pregled« kaže učenca in zgodovino stanj, pri oddanem testu gumb »Začni pregled«. Stran ni v navigaciji; test, ki ga mentor ne vidi (osnutek, tuj učenec, prekinjena povezava), prikaže »Test ne obstaja«.
 - **Zaslon mentorjevega pregleda** (`#pregled/<id>`, wireframe WF-05): oznaka »Samo za branje«, štiri metrike (neto dobiček, donosnost, največji padec, delež dobičkonosnih), krivulja, blok »Nastavitve (zaklenjeno)« s parametri in stroški ter posli. Desno so »Komentarji«, »Odločitev in zgodovina stanj«. Zabeležene napake so izpisane ločeno nad običajnimi komentarji, z rdečo oznako »Napaka«. Obrazec za komentar (z »Označi kot napako«) je viden samo med pregledom; »Zahtevaj spremembe« je onemogočen, dokler ni vsaj enega komentarja, »Zahtevaj spremembe« in »Odobri« zahtevata potrditev. Po odločitvi so komentarji zaklenjeni.
-- **Trgovec** na strani rezultatov (`#backtests/<id>`) za oddan test vidi razdelek »Komentarji mentorja« samo za branje, napake z rdečo oznako.
+- **Trgovec** na strani rezultatov (`#backtests/<id>`) za oddan test vidi panel »Mentorjev odziv«: trenutno stanje in mentorjeve komentarje samo za branje (napake ločeno, z rdečo oznako). Pri stanju »Zahtevane spremembe« je na voljo gumb »Ponovi test«, ki ustvari nov osnutek z istimi nastavitvami in ga odpre; če ponovitev že obstaja, panel kaže povezavo nanjo. Ponovitev ima v glavi povezavo »Ponovitev testa #N« na prejšnji test, seznam zagonov pa pri njej pripiše »ponovitev #N«.
 
 ## Oddaja testa v mentorski pregled
 
@@ -366,6 +366,18 @@ Tabela `comments` (migracija `011_comments.sql`, docs/03) hrani mentorjeve komen
 - **Odločitev:** vsak prehod se zapiše v `status_history` (mentor, čas). Zahteva za spremembe brez komentarja je `409`; odobritev komentarja ne zahteva. Po odločitvi (`changes_requested`, `approved`) so komentarji zaklenjeni, stanji sta končni.
 - **Trgovec:** komentarje svojega testa lahko bere, dodajati, spreminjati ali brisati jih ne more (`403` pri dodajanju; poti za spreminjanje in brisanje ne obstajajo, `405`/`404`).
 - Testi v `testDb.ts` ustvarijo bazo s kodiranjem UTF-8 ne glede na privzeto kodiranje strežnika, da dolžina komentarja šteje znake.
+
+### Ponovitev testa (»Ponovi test«)
+
+Ko mentor zahteva spremembe (`changes_requested`), trgovec iz testa naredi ponovitev. Migracija `012_backtest_previous.sql` doda `backtests.previous_id` in enolični delni indeks, ki dovoli največ eno ponovitev iz istega testa.
+
+| Pot | Vloga | Opis |
+|---|---|---|
+| `POST /api/backtests/:id/retest` | trgovec (lastnik) | ustvari nov test z istimi nastavitvami; `201` z novim testom |
+
+- **Nastavitve:** strategija, parametri, sredstva, borza, obdobje in načrt financiranega računa se prenesejo. Test se izračuna znova s trenutno strategijo in podatki (strategijo je medtem mogoče popraviti), zato se rezultat lahko razlikuje. Nov test je v stanju `draft`, brez mentorja in zgodovine ter kaže na prejšnjega (`previous_id`). Če izračun ne uspe (npr. manjkajo podatki), test ni ustvarjen in je odgovor enak kot pri navadnem zagonu (`400`/`422`).
+- **Pogoji:** prvotni test mora biti v stanju `changes_requested` (sicer `409`) in ne sme biti že ponovljen (`409`, tudi pri sočasnih zahtevkih). Tuj ali neobstoječ test je `404`, mentor in administrator `403`.
+- **Odgovor:** vsak test vsebuje `previous_id` (test, iz katerega je nastal, ali `null`) in `next_id` (njegova ponovitev ali `null`); to velja tudi za seznam `GET /api/backtests`. Prvotni test ostane nespremenjen v stanju `changes_requested`; ponovitev se odda mentorju kot vsak osnutek.
 
 ## Testiranje
 
