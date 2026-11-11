@@ -42,7 +42,7 @@ test('GET /api/strategies vrne sistemske, lastne in deljene strategije drugih, n
     const res = await get(base, '/api/strategies', anaCookie);
     assert.equal(res.status, 200);
     const list = (await res.json()) as Item[];
-    assert.deepEqual(list.map((s) => s.name), ['Buy & Hold', 'SMA Crossover', 'Breakout (Donchian)', 'Anina zasebna', 'Anina deljena', 'Borova deljena']);
+    assert.deepEqual(list.map((s) => s.name), ['Nakup in zadrži', 'Presek drsečih povprečij (SMA)', 'Preboj (Donchian)', 'Anina zasebna', 'Anina deljena', 'Borova deljena']);
 
     const system = list.filter((s) => s.system);
     assert.equal(system.length, 3);
@@ -69,14 +69,14 @@ test('GET /api/strategies/:id vrne podrobnosti s kodo in privzetimi parametri', 
   await withApp(async (base, pool) => {
     const { anaCookie } = await setup(base, pool);
     const list = (await (await get(base, '/api/strategies', anaCookie)).json()) as Item[];
-    const sma = list.find((s) => s.name === 'SMA Crossover')!;
+    const sma = list.find((s) => s.name === 'Presek drsečih povprečij (SMA)')!;
 
     const res = await get(base, `/api/strategies/${sma.id}`, anaCookie);
     assert.equal(res.status, 200);
     const body = (await res.json()) as Record<string, unknown>;
-    assert.equal(body.name, 'SMA Crossover');
+    assert.equal(body.name, 'Presek drsečih povprečij (SMA)');
     assert.equal(body.author, 'Sistem');
-    assert.deepEqual(body.default_params, { fast: 10, slow: 30 });
+    assert.deepEqual(body.default_params, { hitro_povprecje: 10, pocasno_povprecje: 30 });
     assert.match(body.source as string, /^export default/);
   });
 });
@@ -112,6 +112,6 @@ test('administrator ne vidi zasebnih strategij uporabnikov', async () => {
     await setup(base, pool);
     const admin = await loginCookie(base, await addUser(pool, 'admin'));
     const list = (await (await get(base, '/api/strategies', admin)).json()) as Item[];
-    assert.deepEqual(list.map((s) => s.name), ['Buy & Hold', 'SMA Crossover', 'Breakout (Donchian)', 'Anina deljena', 'Borova deljena']);
+    assert.deepEqual(list.map((s) => s.name), ['Nakup in zadrži', 'Presek drsečih povprečij (SMA)', 'Preboj (Donchian)', 'Anina deljena', 'Borova deljena']);
   });
 });

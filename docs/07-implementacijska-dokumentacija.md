@@ -36,7 +36,7 @@ cp "$PTS"/01_Dukascopy/EURUSD/1m/*.parquet data/EURUSD/
 cp "$PTS"/01_Dukascopy/USATECHIDXUSD/1m/*.parquet data/NAS100/
 ```
 
-Preverjanje: `curl http://localhost:18080/api/instruments` za vsako sredstvo vrne `candles` (število svečk) ter `data_from` in `data_to` (celoten razpon podatkov). Sredstva brez podatkov imajo `candles: 0` in `null` razpon. Podatki se berejo ob vsakem zahtevku, zato po dodajanju datotek ponovni zagon ni potreben.
+Preverjanje (endpoint zahteva prijavo, zato najprej `POST /api/auth/login` z `-c` za piškotek, nato `curl -b`): `GET /api/instruments` za vsako sredstvo vrne `candles` (število svečk) ter `data_from` in `data_to` (celoten razpon podatkov). Sredstva brez podatkov imajo `candles: 0` in `null` razpon. Podatki se berejo ob vsakem zahtevku, zato po dodajanju datotek ponovni zagon ni potreben.
 
 Brez mape `data/` se aplikacija normalno zažene, samo da nobeno sredstvo nima podatkov. Testi si sami ustvarijo majhno količino podatkov (dva dni minutnih svečk), zato za teste in CI pravi podatki niso potrebni.
 
@@ -68,7 +68,7 @@ Seja je JWT (HS256, veljavnost 1 ura), podpisan z `JWT_SECRET`, v piškotku `htt
 
 Administratorski račun backend ob zagonu ustvari iz `ADMIN_EMAIL` in `ADMIN_PASSWORD`. Če račun s tem e-naslovom že obstaja, mu nastavi vlogo `admin` in ga odblokira, gesla pa ne spremeni. Če spremenljivki nista nastavljeni, admin ni ustvarjen.
 
-Frontend po prijavi preusmeri uporabnika glede na vlogo: Trgovec na Strategije, Mentor na Dashboard, Administrator na Database. Glava prikazuje navigacijo vloge (Trgovec: Strategije, Backtests, Mentor; Mentor: Dashboard, Učenci, Analitika; Administrator: Database) in uporabniški meni z odjavo. Neprijavljen uporabnik je preusmerjen na prijavo. Preverjanje v brskalniku je samo udobje, dostop dejansko odloča backend.
+Frontend po prijavi preusmeri uporabnika glede na vlogo: Trgovec na Strategije, Mentor na Nadzorno ploščo, Administrator na Administracijo. Glava prikazuje navigacijo vloge (Trgovec: Strategije, Testi, Mentor; Mentor: Nadzorna plošča, Učenci, Analitika; Administrator: Administracija) in uporabniški meni z odjavo. Neprijavljen uporabnik je preusmerjen na prijavo. Preverjanje v brskalniku je samo udobje, dostop dejansko odloča backend.
 
 ## Simulacija
 
@@ -122,8 +122,8 @@ Strategijo naloži uporabnik, zato je njena koda nezaupanja vredna (ADR 0007, AD
 
 - **Ločen delavec:** vsak zagon ustvari nov `worker_thread` (`strategyWorker.ts`). Delavec ne uvaža nobenega modula backenda, zato nima povezave z bazo ali datotekami, in dobi prazno okolje (brez `DATABASE_URL`, `JWT_SECRET` ...). Podatki iz baze in svečke pridejo od backenda, delavec pa vrne samo posle.
 - **Prazen `vm` kontekst:** strategija vidi samo vgrajene objekte JavaScripta (`Math`, `JSON`, `Array` ...), ne pa `process`, `require`, `fetch`, `Buffer`, časovnikov, datotek ali `import` modulov. `eval` in `new Function` sta onemogočena. Svečke in parametri gredo v kontekst in rezultat iz njega samo kot nizi JSON, zato strategija ne dobi referenc na objekte delavca.
-- **Čas:** strategija, ki teče dlje od 60 s, se prekine (`vm` omejitev znotraj delavca in zunanji časovnik).
-- **Pomnilnik:** delavec ima omejitev 128 MB. Če jo preseže, se konča samo ta delavec, backend teče naprej.
+- **Čas:** strategija, ki teče dlje od 5 minut (privzeto; pri testu je to skupna omejitev za vsa sredstva), se prekine (`vm` omejitev znotraj delavca in zunanji časovnik).
+- **Pomnilnik:** delavec ima privzeto omejitev 1024 MB (dovolj za celo leto minutnih svečk). Če jo preseže, se konča samo ta delavec, backend teče naprej.
 - **Napake:** uporabnik dobi razumljivo sporočilo (`StrategyError`): napaka strategije (samo besedilo napake, brez sledi sklada), prekoračitev časa ali pomnilnika. Notranje napake se zapišejo samo v dnevnik strežnika.
 
 Oblika strategije je `export default (bars, params) => trades[]` (glej poglavje »Simulacija«); sinhrona funkcija, ki vrne seznam poslov.
@@ -136,9 +136,9 @@ Tabela `strategies` (migracija `005_strategies.sql`) hrani strategije: lastnik (
 
 | Strategija | Opis | Privzeti parametri |
 |---|---|---|
-| Buy & Hold | kupi ob prvi svečki in drži do konca obdobja | / |
-| SMA Crossover | long, ko hitro drseče povprečje preseže počasnega, izstop ob obratu | `fast` 10, `slow` 30 |
-| Breakout (Donchian) | long ob preboju najvišje cene zadnjih `period` svečk, izstop pod najnižjo ceno zadnjih `exitPeriod` svečk | `period` 20, `exitPeriod` 10 |
+| Nakup in zadrži | kupi ob prvi svečki in drži do konca obdobja | / |
+| Presek drsečih povprečij (SMA) | nakup, ko hitro drseče povprečje preseže počasnega, izstop ob obratu | `hitro_povprecje` 10, `pocasno_povprecje` 30 |
+| Preboj (Donchian) | nakup ob preboju najvišje cene zadnjih `obdobje` svečk, izstop pod najnižjo ceno zadnjih `izstopno_obdobje` svečk | `obdobje` 20, `izstopno_obdobje` 10 |
 
 Vstopi in izstopi so ob odprtju svečke po signalu, odprta pozicija se zapre ob zaprtju zadnje svečke. Sistemske strategije se izvajajo v delavcu kot vsaka druga (poglavje »Izolirano izvajanje strategij«), test v `systemStrategies.test.ts` preveri, da vsaka vrne posle, ki jih simulator sprejme.
 
@@ -193,15 +193,15 @@ Telo zahtevka `POST /api/backtests` (JSON):
 | `params` | neobvezno; objekt, ki se združi s `default_params` strategije samo za ta test (strategija ostane nespremenjena) |
 | `prop_plan_id` | neobvezno; načrt financiranega računa (`prop_plans`); prazna vrednost pomeni brez načrta (poglavje »Pravila financiranega računa«) |
 
-Odgovori ob napaki: `400` z `{ "errors": { "<polje>": "<sporočilo>" } }` pri neveljavnem vhodu (polja `strategy_id`, `instruments`, `venue_id`, `from`, `to`, `params`, `prop_plan_id` in `period`; pri obdobju zunaj podatkov sporočilo vsebuje veljaven razpon) in `422` z `{ "error": "<razlog>" }`, če strategija vrže napako, preseže čas ali vrne neveljavne posle. V obeh primerih se test ne shrani, sporočilo pa ne vsebuje notranjih podrobnosti strežnika.
+Odgovori ob napaki: `400` z `{ "errors": { "<polje>": "<sporočilo>" } }` pri neveljavnem vhodu (polja `strategy_id`, `instruments`, `venue_id`, `from`, `to`, `params`, `prop_plan_id`, `initial_capital`, `timeframe` in `period`; pri obdobju zunaj podatkov sporočilo vsebuje veljaven razpon) in `422` z `{ "error": "<razlog>" }`, če strategija vrže napako, preseže čas ali vrne neveljavne posle. V obeh primerih se test ne shrani, sporočilo pa ne vsebuje notranjih podrobnosti strežnika.
 
-Izračun: strategija teče v delavcu za vsako izbrano sredstvo (skupna omejitev 60 s), nato `simulate` (poglavje »Simulacija«) izračuna rezultat z borzo in razponi iz baze. Začetni kapital testa je 10.000 in se enakomerno razdeli med izbrana sredstva. V `results` so metrike (`netProfit`, `returnPct`, `tradeCount`, `winRatePct`, `maxDrawdownPct`), bruto dobiček in stroški (`grossProfit`, `costs`), dnevna krivulja (`equityCurve`) in posli (`trades`). Posli so shranjeni v `results`, vendar jih `GET /api/backtests/:id` ne vrne; berejo se po straneh preko `/trades`.
+Izračun: strategija teče v delavcu za vsako izbrano sredstvo (skupna omejitev 5 minut), nato `simulate` (poglavje »Simulacija«) izračuna rezultat z borzo in razponi iz baze. Začetni kapital izbere uporabnik (`initial_capital`, od 100 do 1.000.000.000, privzeto 10.000); enakomerno se razdeli med izbrana sredstva, z načrtom financiranega računa pa velja velikost računa. Strategija dobi svečke časovnega okvira `timeframe` (`1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, privzeto `1m`): backend jih v DuckDB združi iz minutnih podatkov (open = prva, high = največja, low = najmanjša, close = zadnja, volume = vsota; okvirji so poravnani na UTC). Kapital in časovni okvir sta shranjena v `results` (`initialCapital`, `timeframe`) in se ob ponovitvi testa prenesejo. V `results` so metrike (`netProfit`, `returnPct`, `tradeCount`, `winRatePct`, `maxDrawdownPct`), bruto dobiček in stroški (`grossProfit`, `costs`), dnevna krivulja (`equityCurve`) in posli (`trades`). Posli so shranjeni v `results`, vendar jih `GET /api/backtests/:id` ne vrne; berejo se po straneh preko `/trades`.
 
-Omejitev obsega: backend pred nalaganjem prešteje svečke v izbranem obdobju in zavrne test, če jih je za katerokoli sredstvo več kot `MAX_BARS` (400.000, pri minutnih podatkih okoli 9 mesecev). Odgovor je `400` z `errors.period` (»Obdobje za <TICKER> vsebuje N svečk, dovoljenih je največ 400.000. Izberite krajše obdobje.«). Brez omejitve bi backend pri milijonih svečk zmanjkalo pomnilnika.
+Omejitev obsega: backend pred nalaganjem prešteje svečke v izbranem obdobju in zavrne test, če jih je za katerokoli sredstvo več kot `MAX_BARS` (1.000.000 svečk izbranega časovnega okvira; pri minutnih podatkih okoli 1,9 leta, tako da gre celo leto podatkov skozi, pri urnem okviru več kot 100 let). Odgovor je `400` z `errors.period` (»Obdobje za <TICKER> vsebuje N svečk, dovoljenih je največ 1.000.000. Izberite krajše obdobje ali daljši časovni okvir.«). Prvotna omejitev je bila 400.000 svečk (okoli 9 mesecev minutnih podatkov); povečana je skupaj z delavcem (1 GB) in časovno omejitvijo (5 minut), nginx pa počaka na odgovor do 330 s. Celoletni test minutnih podatkov traja nekaj sekund.
 
 ### Pravila financiranega računa
 
-Če test izbere načrt (`prop_plan_id`), se izvede s kapitalom računa (`account_size`) namesto z začetnim kapitalom 10.000, nato pa `checkChallenge` (`propRules.ts`) iz dnevne krivulje (poglavje »Dnevna krivulja«) preveri tri pravila. Test se vedno izvede do konca obdobja, kršitev ga ne ustavi.
+Če test izbere načrt (`prop_plan_id`), se izvede s kapitalom računa (`account_size`) namesto z izbranim začetnim kapitalom, nato pa `checkChallenge` (`propRules.ts`) iz dnevne krivulje (poglavje »Dnevna krivulja«) preveri tri pravila. Test se vedno izvede do konca obdobja, kršitev ga ne ustavi.
 
 | Pravilo | Dosežen znesek | Izpolnjeno, če |
 |---|---|---|
@@ -216,16 +216,16 @@ Omejitev obsega: backend pred nalaganjem prešteje svečke v izbranem obdobju in
 
 Rezultati so v `results.challenge`: `{ passed, profitTarget, maxDailyLoss, maxTotalLoss }`, kjer ima vsako pravilo `{ achieved, allowed, passed, firstViolation }`. Skupni izid se shrani tudi v stolpec `challenge_passed` (`true` samo, če so izpolnjena vsa tri pravila), načrt pa v `prop_plan_id`. **Brez načrta** sta oba stolpca prazna (`NULL`) in razdelka `results.challenge` ni; baza to zagotavlja z omejitvijo `CHECK` (`challenge_passed` je prazen natanko takrat, ko je prazen `prop_plan_id`). Odgovora `GET /api/backtests` in `GET /api/backtests/:id` vsebujeta `challenge_passed` in `prop_plan` (ime in pravila načrta ali `null`).
 
-### Stran Backtests (frontend)
+### Stran Testi (frontend)
 
-Stran **Backtests** (trgovec, wireframe WF-02) ima levo obrazec »Nov test«, desno pa »Seznam zagonov«.
+Stran **Testi** (trgovec, wireframe WF-02) ima levo obrazec »Nov test«, desno pa »Seznam zagonov«.
 
-- **Obrazec:** strategija, eno ali več sredstev (sredstva brez zgodovinskih podatkov so onemogočena), obdobje Od/Do, borza (prikaže provizije in razpon), financiran račun in nastavitve strategije. Financiran račun je neobvezen; ob izbiri se prikažejo njegova pravila, test pa teče s kapitalom računa (poglavje »Pravila financiranega računa«).
+- **Obrazec:** strategija, eno ali več sredstev (sredstva brez zgodovinskih podatkov so onemogočena), obdobje Od/Do, časovni okvir svečk, borza (prikaže provizije in razpon), financiran račun, začetni kapital (z računom je določen z velikostjo računa) in nastavitve strategije. Financiran račun je neobvezen; ob izbiri se prikažejo njegova pravila, test pa teče s kapitalom računa (poglavje »Pravila financiranega računa«).
 - **Obdobje:** poleg ročnega vnosa datumov so prednastavitve »Celotna zgodovina«, »Zadnje leto«, »Zadnja 3 leta« in »Zadnjih 5 let«. Računajo se iz skupnega razpona podatkov izbranih sredstev, začetek pa ni nikoli pred začetkom podatkov.
 - **Nastavitve strategije:** za vsak privzeti parameter strategije je eno polje. Na backend se pošljejo samo spremenjene vrednosti, ki veljajo samo za ta test; `default_params` strategije ostanejo nespremenjeni.
 - **Napake:** validacijo opravi backend, napake so prikazane ob poljih (npr. veljaven razpon podatkov ob obdobju zunaj podatkov), razlog napake ali prekinitve strategije pa pod gumbom »Zaženi test«, brez notranjih podrobnosti strežnika.
 - **Po zagonu** se odpre stran rezultatov `#backtests/<id>` (poglavje »Stran rezultatov«).
-- **Seznam zagonov:** lastni testi (zagon, obdobje, rezultat, vidnost; pri testu z načrtom tudi izid izziva), najnovejši prvi; klik na vrstico odpre rezultate. Filter po skupini sredstev (`asset_class`: Crypto, Forex, Indeksi, Zlato) in »Vse«; zagon z več sredstvi se prikaže v skupini vsakega svojega sredstva.
+- **Seznam zagonov:** lastni testi (zagon, obdobje, rezultat, vidnost; pri testu z načrtom tudi izid izziva), najnovejši prvi; klik na vrstico odpre rezultate. Filter po skupini sredstev (`asset_class`: Kriptovalute, Devize, Indeksi, Zlato) in »Vse«; zagon z več sredstvi se prikaže v skupini vsakega svojega sredstva.
 
 ### Stran rezultatov (frontend)
 
@@ -419,7 +419,7 @@ Dokument `docs/05-uporabniske-zgodbe.md` se v kriterijih sklicuje na pravila P1�
 |---|---|---|
 | P1 | Skrite stvari ne obstajajo: strategija, test ali pregled, ki ga uporabnik ne sme videti, vrne `404` (ne `403`), tako da obstoj ni razkrit. Velja tudi za administratorja. Vidno, a prepovedano dejanje vrne `403`, napačno stanje pa `409`. | `visibleTo`, `viewableBy` v `backtestsApi.ts`, `strategies.ts` |
 | P3 | Seznami so paginirani po 20 vnosov na stran, odgovor vsebuje `page`, `pageSize`, `total` in `pages`. | `REVIEW_PAGE_SIZE`, `USERS_PAGE_SIZE`, seznami strategij in testov |
-| P6 | Napake simulacije ne razkrijejo notranjih podrobnosti (sledi sklada, poti); test, ki traja dlje kot 60 s ali sproži napako, se prekine in ne shrani. | `strategyWorker.ts`, poglavje »Izolirano izvajanje strategij« |
+| P6 | Napake simulacije ne razkrijejo notranjih podrobnosti (sledi sklada, poti); test, ki traja dlje kot 5 minut ali sproži napako, se prekine in ne shrani. | `strategyWorker.ts`, poglavje »Izolirano izvajanje strategij« |
 | P7 | Datoteka strategije: ime 3–80 znakov, največ 100 KB, mora biti razčlenljiva; sporočilo napake vsebuje konkreten razlog in vrstico. | poglavje »Nalaganje lastnih strategij« |
 | P8 | Sprememba referenčnih podatkov (borza, načrt financiranega računa, instrument) ne vpliva na že shranjene rezultate: rezultati (metrike, posli, stroški, izid izziva) se izračunajo in shranijo ob zagonu, zapis, ki ga uporablja test, pa se ne izbriše. | poglavje »Vzdrževanje referenčnih podatkov (API)« |
 
@@ -457,7 +457,7 @@ Zasloni ustrezajo wireframom `docs/wireframes/WF-01..WF-06`. Ker so wireframi sk
 | WF-03 Rezultati | Primerjava se začne iz seznama zagonov (kljukice), ne iz strani rezultatov. |
 | WF-04 Mentor dashboard | Mentorjev odziv je spodnji razdelek strani pregleda. |
 | WF-05 Pregled testa | Komentarji in odločitev sta v enem razdelku pod rezultati. |
-| WF-06 Administracija | Zavihek »Database« je v meniju poimenovan »Referenčni podatki«; poleg tega je zavihek »Uporabniki«. |
+| WF-06 Administracija | Meni Administracija vsebuje zavihke »Borze«, »Financirani računi«, »Sredstva« in »Uporabniki«. |
 
 ## Skladnost z ADR
 

@@ -8,12 +8,12 @@ import { toast } from './ui';
 // Strani za posamezne vloge. Vsebina ostalih strani sledi v naslednjih nalogah.
 export const PAGE_TITLES: Record<string, string> = {
   strategije: 'Strategije',
-  backtests: 'Backtests',
+  backtests: 'Testi',
   mentor: 'Mentor',
-  dashboard: 'Dashboard',
+  dashboard: 'Nadzorna plošča',
   ucenci: 'Učenci',
   analitika: 'Analitika',
-  administracija: 'Database',
+  administracija: 'Administracija',
 };
 
 function showError(container: HTMLElement): void {

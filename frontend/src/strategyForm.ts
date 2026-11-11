@@ -25,7 +25,7 @@ export async function renderStrategyForm(container: HTMLElement, id: string | nu
     const { status, data } = await getJson(`/api/strategies/${encodeURIComponent(id)}`);
     if (status === 401) return onUnauthorized();
     if (status !== 200) {
-      container.innerHTML = '<p><a href="#strategije">← Nazaj na Strategije</a></p><p class="error"></p>';
+      container.innerHTML = '<p><a href="#strategije">← Nazaj na strategije</a></p><p class="error"></p>';
       container.querySelector('.error')!.textContent = errorMessage(data, 'Strategije ni mogoče naložiti.');
       return;
     }
@@ -33,7 +33,7 @@ export async function renderStrategyForm(container: HTMLElement, id: string | nu
   }
 
   container.innerHTML = `
-    <p><a href="#strategije">← Nazaj na Strategije</a></p>
+    <p><a href="#strategije">← Nazaj na strategije</a></p>
     <h2></h2>
     <form id="strategy-form" class="narrow" novalidate>
       <label for="s-name">Ime (3–80 znakov)</label>
@@ -62,7 +62,7 @@ export async function renderStrategyForm(container: HTMLElement, id: string | nu
   $('h2').textContent = existing ? `Uredi strategijo #${existing.id}` : 'Nova strategija';
   const save = $<HTMLButtonElement>('#s-save');
   save.textContent = existing ? 'Shrani spremembe' : 'Naloži strategijo';
-  $('#file-hint').textContent = existing ? 'Pustite prazno, če želite obdržati trenutno datoteko.' : 'Datoteka mora vsebovati »export default (bars, params) => trades«.';
+  $('#file-hint').textContent = existing ? 'Pustite prazno, če želite obdržati trenutno datoteko.' : 'Datoteka mora vsebovati »export default (bars, params) => trades«: funkcija dobi seznam svečk (bars) in parametre (params) ter vrne seznam poslov (trades).';
   if (existing) {
     $<HTMLInputElement>('#s-name').value = existing.name;
     $<HTMLTextAreaElement>('#s-description').value = existing.description;

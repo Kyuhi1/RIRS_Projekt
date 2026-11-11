@@ -41,8 +41,8 @@ export interface Reference {
 }
 
 export const ASSET_CLASS_LABELS: Record<Instrument['asset_class'], string> = {
-  crypto: 'Crypto',
-  forex: 'Forex',
+  crypto: 'Kriptovalute',
+  forex: 'Devize',
   index: 'Indeksi',
   gold: 'Zlato',
 };

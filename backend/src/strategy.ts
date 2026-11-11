@@ -6,8 +6,8 @@ import type { Trade } from './simulation.ts';
 export class StrategyError extends Error {}
 
 export interface RunOptions {
-  timeoutMs?: number; // največji čas izvajanja, privzeto 60 s
-  memoryMb?: number; // največ pomnilnika delavca, privzeto 128 MB
+  timeoutMs?: number; // največji čas izvajanja, privzeto 5 min
+  memoryMb?: number; // največ pomnilnika delavca, privzeto 1024 MB (dovolj za nekaj sto tisoč svečk)
 }
 
 const WORKER = new URL('./strategyWorker.ts', import.meta.url);
@@ -17,8 +17,8 @@ const KILL_GRACE_MS = 1_000; // rezerva, preden delavca ustavimo od zunaj
 // Zažene strategijo `export default (bars, params) => trades[]` v ločenem delavcu in vrne njene posle.
 // Delavec dobi samo svečke in parametre; backendu vrne samo rezultat.
 export function runStrategy(source: string, bars: Candle[], params: unknown, options: RunOptions = {}): Promise<Trade[]> {
-  const timeoutMs = options.timeoutMs ?? 60_000;
-  const memoryMb = options.memoryMb ?? 128;
+  const timeoutMs = options.timeoutMs ?? 300_000;
+  const memoryMb = options.memoryMb ?? 1024;
   const timeoutMessage = `Strategija je presegla časovno omejitev (${Math.round(timeoutMs / 100) / 10} s)`;
   const input = JSON.stringify([bars, params ?? {}]);
 

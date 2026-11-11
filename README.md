@@ -55,6 +55,16 @@ Ob prvem zagonu backend ustvari shemo in referenčne podatke ter administratorja
 
 Format: `data/<TICKER>/<LLLL-MM>.parquet`, minutne svečke s stolpci `open_time` (ms od 1970, UTC), `open`, `high`, `low`, `close`, `volume`. Mapo priklopi `docker-compose.yml` v backend kot `/data` (samo za branje). Podatki se berejo ob vsakem zahtevku, zato po dodajanju datotek ponovni zagon ni potreben. Za testiranje strategij zadošča izbrano obdobje v letu 2025. Sredstva brez podatkov imajo v `GET /api/instruments` `candles: 0`.
 
+Test lahko teče na celotnem letu minutnih podatkov (omejitev je 1.000.000 svečk na sredstvo, izračun traja nekaj sekund, najdaljši dovoljen čas je 5 minut). Pri daljših obdobjih izberi večji časovni okvir (od 5 minut do 1 dneva), s katerim se svečke združijo še pred izvedbo strategije.
+
+Preverjanje (endpoint zahteva prijavo):
+
+```bash
+curl -s -c /tmp/c.txt -X POST http://localhost:18080/api/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"spremeni-me-admin"}'
+curl -s -b /tmp/c.txt http://localhost:18080/api/instruments    # BTCUSDT in EURUSD: candles > 0
+```
+
 Dodatne podatke dodaš v isto strukturo (npr. `data/ETHUSDT/2025-01.parquet`). Samo `2025-*.parquet` v mapah `BTCUSDT` in `EURUSD` sledi Git, vse ostalo v `data/` je v `.gitignore`, da se velike datoteke ne naložijo po pomoti (`.gitignore` prilagodi, če želiš dodati še kaj).
 
 **Demo uporabniki in testi.** Ko aplikacija teče, v mapi `backend` zaženi (zahteva Node.js 24):
@@ -65,7 +75,12 @@ npm run seed:demo                                  # privzeto http://localhost:1
 node scripts/seed-demo.ts http://localhost:18080   # enako, z ročnim naslovom
 ```
 
-Skripta prek javnega API-ja (enako kot uporabnik v brskalniku) ustvari demo trgovca, demo mentorja in aktivno povezavo med njima. Demo trgovec dobi šest testov, po enega v vsakem stanju (`draft`, `submitted`, `in_review`, `changes_requested`, `approved`, `withdrawn`). Skripta je idempotentna: če demo trgovec že ima teste, ne naredi ničesar. Če podatkov v `data/` ni, ustvari samo račune in se ustavi z jasnim sporočilom.
+Skripta prek javnega API-ja (enako kot uporabnik v brskalniku) ustvari:
+
+- **osnovni demo:** demo trgovca, demo mentorja, aktivno povezavo in šest testov, po enega v vsakem stanju (`draft`, `submitted`, `in_review`, `changes_requested`, `approved`, `withdrawn`);
+- **razširjeni demo:** 2 dodatna mentorja, 9 trgovcev (aktivne povezave, eno čakajoče vabilo, en trgovec brez mentorja, en blokiran račun), 4 lastne strategije (3 deljene), okoli 30 testov na BTCUSDT in EURUSD v vseh stanjih, mentorske komentarje (tudi označene napake), en test s ponovitvijo po zahtevanih popravkih in nekaj deljenih testov.
+
+Skripta je idempotentna: če podatki že obstajajo, ne naredi ničesar. Blokada računa uporabi administratorja iz `.env` (iz okolja `ADMIN_EMAIL` in `ADMIN_PASSWORD`, sicer vzorčne vrednosti iz `.env.example`); če prijava ne uspe, blokade ne nastavi. Pri praznem `data/` ustvari samo račune in se ustavi z jasnim sporočilom. Celoten zagon traja približno dve minuti, ker se testi dejansko izračunajo.
 
 ## 6. Navodila za testiranje
 
@@ -112,7 +127,7 @@ Vsi endpointi so pod `/api`. Napake: `401` brez seje, `403` vidno, a nedovoljeno
 | PUT | `/strategies/:id/visibility` | trader | Deli ali prekliči deljenje strategije |
 | GET | `/strategy-catalog` | trader | Katalog strategij z iskanjem in filtri (strani po 20) |
 | GET | `/backtests` | trader | Seznam testov (`scope=mine` ali `shared`) |
-| POST | `/backtests` | trader | Zažene test |
+| POST | `/backtests` | trader | Zažene test (neobvezno `initial_capital`, `timeframe`: `1m` do `1d`, `prop_plan_id`) |
 | GET | `/backtests/compare` | trader | Primerjava testov (`ids=1,2,3`) |
 | GET | `/backtests/:id` | trader, mentor | Rezultat testa (rezultati so nespremenljivi, `PUT`/`PATCH` ju zavrneta) |
 | GET | `/backtests/:id/trades` | trader, mentor | Posli testa po straneh |
@@ -140,13 +155,21 @@ Vsi endpointi so pod `/api`. Napake: `401` brez seje, `403` vidno, a nedovoljeno
 
 ## 9. Seznam testnih računov
 
-Vsi računi so definirani v repozitoriju (`backend/src/demoSeed.ts` in `.env.example`).
+Vsi računi so definirani v repozitoriju (`backend/src/demoSeed.ts`, `backend/src/demoSeedExtended.ts` in `.env.example`). Vsi demo računi imajo geslo `Demo-geslo-123`.
 
 | Račun | Vloga | Geslo | Nastane |
 |---|---|---|---|
 | `demo.trader@example.com` | trader | `Demo-geslo-123` | `npm run seed:demo` |
 | `demo.mentor@example.com` | mentor (aktivna povezava z demo trgovcem) | `Demo-geslo-123` | `npm run seed:demo` |
 | `admin@example.com` | admin | `spremeni-me-admin` | samodejno ob zagonu (vrednosti iz `.env`) |
+| `katja.novak@example.com` | mentorica (učenci: Jure, Maja, Nejc; vabilo za Tilna čaka) | `Demo-geslo-123` | `npm run seed:demo` |
+| `marko.horvat@example.com` | mentor (učenca: Eva, Rok) | `Demo-geslo-123` | `npm run seed:demo` |
+| `luka.kovac@example.com`, `ana.zupancic@example.com` | trader (mentor: Demo Mentor) | `Demo-geslo-123` | `npm run seed:demo` |
+| `jure.potocnik@example.com`, `maja.vidmar@example.com`, `nejc.kralj@example.com` | trader (mentorica: Katja Novak) | `Demo-geslo-123` | `npm run seed:demo` |
+| `eva.korosec@example.com` | trader (mentor: Marko Horvat) | `Demo-geslo-123` | `npm run seed:demo` |
+| `tilen.mlakar@example.com` | trader (vabilo mentorice še ni sprejel) | `Demo-geslo-123` | `npm run seed:demo` |
+| `sara.golob@example.com` | trader (brez mentorja) | `Demo-geslo-123` | `npm run seed:demo` |
+| `rok.zajc@example.com` | trader (račun blokiran, prijava ni mogoča) | `Demo-geslo-123` | `npm run seed:demo` |
 
 Računi so namenjeni samo razvoju in predstavitvi. Pri resni uporabi zamenjaj `ADMIN_EMAIL` in `ADMIN_PASSWORD` v `.env`.
 

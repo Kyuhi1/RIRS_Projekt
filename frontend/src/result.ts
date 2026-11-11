@@ -45,6 +45,7 @@ interface BacktestDetail {
   history: HistoryEntry[];
   results: {
     initialCapital: number;
+    timeframe?: string; // starejši testi ga nimajo (minutne svečke)
     finalCapital: number;
     grossProfit: number;
     costs: { commission: number; spread: number; total: number };
@@ -114,6 +115,8 @@ function rulesSection(challenge: Challenge): HTMLElement {
 }
 
 // Stran rezultatov testa (WF-03): glava z nastavitvami, metrike, krivulja, stroški, pravila in posli.
+const TIMEFRAME_LABELS: Record<string, string> = { '1m': '1 minuta', '5m': '5 minut', '15m': '15 minut', '30m': '30 minut', '1h': '1 ura', '4h': '4 ure', '1d': '1 dan' };
+
 export async function renderResult(container: HTMLElement, id: string, onUnauthorized: () => void, role: Role = 'trader'): Promise<void> {
   container.innerHTML = '<div class="skeleton" role="status" aria-label="Nalagam"><span></span><span></span><span></span><span></span></div>';
   const [detail, venues, me] = await Promise.all([getJson(`/api/backtests/${encodeURIComponent(id)}`), getJson('/api/venues'), role === 'trader' ? fetchCurrentUser() : Promise.resolve(null)]);
@@ -121,7 +124,7 @@ export async function renderResult(container: HTMLElement, id: string, onUnautho
 
   container.replaceChildren();
   const back = make('p');
-  const link = make('a', undefined, role === 'mentor' ? '← Nazaj na Dashboard' : '← Nazaj na Backtests');
+  const link = make('a', undefined, role === 'mentor' ? '← Nazaj na nadzorno ploščo' : '← Nazaj na teste');
   link.href = role === 'mentor' ? '#dashboard' : '#backtests';
   back.append(link);
   container.append(back);
@@ -163,6 +166,7 @@ export async function renderResult(container: HTMLElement, id: string, onUnautho
       ['Sredstva', t.instruments.join(', ')],
       ['Borza', venueName],
       ['Obdobje', `${t.from} do ${t.to}`],
+      ['Časovni okvir', TIMEFRAME_LABELS[r.timeframe ?? '1m'] ?? r.timeframe ?? '1 minuta'],
       ['Začetni kapital', r.initialCapital.toFixed(2)],
       ['Financiran račun', t.prop_plan ? `${t.prop_plan.firm_name} – ${t.prop_plan.plan_name}` : 'ni izbran'],
     ]),
@@ -180,7 +184,7 @@ export async function renderResult(container: HTMLElement, id: string, onUnautho
     rows([
       ['Bruto dobiček', money(r.grossProfit)],
       ['Provizije', r.costs.commission.toFixed(2)],
-      ['Razpon (spread)', r.costs.spread.toFixed(2)],
+      ['Razpon', r.costs.spread.toFixed(2)],
       ['Neto dobiček', money(r.netProfit)],
     ]),
   );
@@ -215,11 +219,12 @@ export async function renderResult(container: HTMLElement, id: string, onUnautho
         ['Sredstva', t.instruments.join(', ')],
         ['Borza', venueName],
         ['Obdobje', `${t.from} do ${t.to}`],
-        ['Začetni kapital', r.initialCapital.toFixed(2)],
+        ['Časovni okvir', TIMEFRAME_LABELS[r.timeframe ?? '1m'] ?? r.timeframe ?? '1 minuta'],
+      ['Začetni kapital', r.initialCapital.toFixed(2)],
         ['Financiran račun', t.prop_plan ? `${t.prop_plan.firm_name} – ${t.prop_plan.plan_name}` : 'ni izbran'],
         ['Bruto dobiček', money(r.grossProfit)],
         ['Provizije', r.costs.commission.toFixed(2)],
-        ['Razpon (spread)', r.costs.spread.toFixed(2)],
+        ['Razpon', r.costs.spread.toFixed(2)],
         ['Skupni stroški', r.costs.total.toFixed(2)],
       ]),
     );

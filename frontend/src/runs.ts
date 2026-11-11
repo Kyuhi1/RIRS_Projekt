@@ -85,6 +85,7 @@ export async function renderRuns(container: HTMLElement, ref: Reference, onUnaut
     draw();
   };
 
+  const venueNames = new Map<string, string>(ref.venues.map((v) => [v.id, v.name]));
   const classOf = new Map<string, Instrument['asset_class']>(ref.instruments.map((i) => [i.ticker, i.asset_class]));
   let active = 'all';
   const buildFilters = () => {
@@ -146,13 +147,14 @@ export async function renderRuns(container: HTMLElement, ref: Reference, onUnaut
       details.className = 'hint';
       const plan = run.prop_plan ? ` · ${run.prop_plan.firm_name} ${run.prop_plan.plan_name}: ${run.challenge_passed ? 'izziv opravljen' : 'izziv ni opravljen'}` : '';
       const again = run.previous_id !== null ? ` · ponovitev #${run.previous_id}` : '';
-      details.textContent = `${run.instruments.join(', ')} · ${run.venue_id}${plan}${again}`;
+      details.textContent = `${run.instruments.join(', ')} · ${venueNames.get(run.venue_id) ?? run.venue_id}${plan}${again}`;
       name.append(link, details);
 
       const period = document.createElement('td');
-      period.textContent = `${run.from} do ${run.to}`;
+      period.className = 'period';
+      for (const text of [`${run.from} do`, run.to]) period.append(Object.assign(document.createElement('span'), { textContent: text }));
       const result = document.createElement('td');
-      result.className = run.summary.netProfit >= 0 ? 'pnl-up' : 'pnl-down';
+      result.className = `nowrap ${run.summary.netProfit >= 0 ? 'pnl-up' : 'pnl-down'}`;
       result.textContent = `${money(run.summary.netProfit)} (${money(run.summary.returnPct)} %)`;
       const state = document.createElement('td');
       state.append(statusBadge(run.status));

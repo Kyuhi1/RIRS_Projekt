@@ -76,7 +76,7 @@ async function act(id: number, action: 'accept' | 'decline' | 'end', message: HT
 }
 
 export type MentorView = 'dashboard' | 'ucenci' | 'analitika';
-const MENTOR_TITLES: Record<MentorView, string> = { dashboard: 'Dashboard', ucenci: 'Učenci', analitika: 'Analitika' };
+const MENTOR_TITLES: Record<MentorView, string> = { dashboard: 'Nadzorna plošča', ucenci: 'Učenci', analitika: 'Analitika' };
 
 // Mentorjev dashboard (WF-04): levo Učenci in Povabi učenca, desno zagoni za pregled in analitika.
 // Strani »Učenci« in »Analitika« v navigaciji prikažeta isti vsebini vsako zase.
@@ -122,6 +122,7 @@ export async function renderMentorDashboard(container: HTMLElement, onUnauthoriz
       waiting.textContent = student ? String(student.waiting_count) : '–';
       waiting.dataset.waiting = '';
       const actions = row.insertCell();
+      actions.className = 'actions';
       if (link.status === 'active') {
         actions.append(confirmButton('Odstrani', 'Potrdi odstranitev', () => void act(link.id, 'end', message, reload, onUnauthorized)));
       }
