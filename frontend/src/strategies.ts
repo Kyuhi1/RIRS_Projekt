@@ -1,6 +1,6 @@
 import { deleteJson, errorMessage, getJson } from './api';
 import { clearFlash, flash, renderStrategyForm } from './strategyForm';
-import { button, VISIBILITY_LABELS, visibilityControl, type Visibility } from './ui';
+import { button, emptyState, VISIBILITY_LABELS, visibilityControl, type Visibility } from './ui';
 
 interface Strategy {
   id: number;
@@ -43,7 +43,7 @@ async function renderList(container: HTMLElement, onUnauthorized: () => void): P
       <input id="strategy-search" type="search" autocomplete="off" placeholder="Vsaj 3 znaki" />
       <span class="hint" id="search-hint"></span></p>
     <p class="error" id="list-message" role="alert"></p>
-    <div id="list"><p>Nalagam ...</p></div>
+    <div id="list"><div class="skeleton" role="status" aria-label="Nalagam"><span></span><span></span><span></span><span></span></div></div>
     <div class="pager" id="pager"></div>`;
   container.querySelector('#flash')!.textContent = flash;
   clearFlash();
@@ -78,7 +78,11 @@ async function renderList(container: HTMLElement, onUnauthorized: () => void): P
   const draw = (catalog: Catalog) => {
     pager.replaceChildren();
     if (catalog.items.length === 0 && catalog.total === 0) {
-      list.innerHTML = '<p>Ni strategij. <a href="#strategije/nova">Naloži novo strategijo</a></p>';
+      const add = document.createElement('a');
+      add.className = 'button primary';
+      add.href = '#strategije/nova';
+      add.textContent = 'Naloži novo strategijo';
+      list.replaceChildren(emptyState('Ni strategij', 'Naložite prvo strategijo, da lahko zaženete test.', add));
       return;
     }
     const table = document.createElement('table');

@@ -1,4 +1,5 @@
 import { errorMessage, getJson } from './api';
+import { skeleton } from './ui';
 
 interface Student {
   id: number;
@@ -58,7 +59,7 @@ export function renderStudentAnalytics(box: HTMLElement, onUnauthorized: () => v
         return b;
       }),
     );
-    content.replaceChildren(make('p', 'hint', 'Nalagam ...'));
+    content.replaceChildren(skeleton());
     const { status, data } = await getJson(`/api/mentor/students/analytics?period=${period}`);
     if (status === 401) return onUnauthorized();
     if (status !== 200) return content.replaceChildren(make('p', 'error', errorMessage(data, 'Analitike ni mogoče naložiti.')));

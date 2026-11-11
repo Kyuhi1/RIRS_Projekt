@@ -5,7 +5,7 @@ import { renderFeedback } from './feedback';
 import { renderReview, type HistoryEntry } from './review';
 import { fetchCurrentUser, type Role } from './session';
 import { VISIBILITY_LABELS, visibilityControl } from './ui';
-import { statusLabel } from './status';
+import { statusBadge } from './status';
 import { renderTrades } from './trades';
 
 interface Venue {
@@ -59,7 +59,7 @@ interface BacktestDetail {
 }
 
 const money = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}`;
-const sign = (value: number) => (value >= 0 ? 'positive' : 'negative');
+const sign = (value: number) => (value >= 0 ? 'pnl-up' : 'pnl-down'); // barva + ikona ▲/▼
 
 function make<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -115,7 +115,7 @@ function rulesSection(challenge: Challenge): HTMLElement {
 
 // Stran rezultatov testa (WF-03): glava z nastavitvami, metrike, krivulja, stroški, pravila in posli.
 export async function renderResult(container: HTMLElement, id: string, onUnauthorized: () => void, role: Role = 'trader'): Promise<void> {
-  container.innerHTML = '<p>Nalagam ...</p>';
+  container.innerHTML = '<div class="skeleton" role="status" aria-label="Nalagam"><span></span><span></span><span></span><span></span></div>';
   const [detail, venues, me] = await Promise.all([getJson(`/api/backtests/${encodeURIComponent(id)}`), getJson('/api/venues'), role === 'trader' ? fetchCurrentUser() : Promise.resolve(null)]);
   if (detail.status === 401 || venues.status === 401 || (role === 'trader' && me === null)) return onUnauthorized();
 
@@ -137,7 +137,7 @@ export async function renderResult(container: HTMLElement, id: string, onUnautho
   const venueName = venue?.name ?? t.venue_id;
 
   const header = make('header', 'result-head');
-  header.append(make('h2', undefined, `Zagon #${t.id}: ${t.strategy_name}`), make('span', 'badge', statusLabel(t.status)));
+  header.append(make('h2', undefined, `Zagon #${t.id}: ${t.strategy_name}`), statusBadge(t.status));
   if (t.previous_id !== null) {
     const origin = make('a', undefined, `Ponovitev testa #${t.previous_id}`);
     origin.href = role === 'mentor' ? `#pregled/${t.previous_id}` : `#backtests/${t.previous_id}`;

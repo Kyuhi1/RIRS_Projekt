@@ -1,5 +1,6 @@
 import { errorMessage, getJson, postJson } from './api';
-import { statusLabel, when } from './status';
+import { statusBadge, when } from './status';
+import { emptyState, skeleton } from './ui';
 
 interface Item {
   id: number;
@@ -84,7 +85,7 @@ export function renderReviewQueue(box: HTMLElement, onUnauthorized: () => void):
   const draw = (queue: Queue) => {
     pager.replaceChildren();
     if (queue.items.length === 0 && queue.total === 0) {
-      table.replaceChildren(make('p', 'hint', 'Ni testov v tem stanju.'));
+      table.replaceChildren(emptyState('Ni testov v tem stanju'));
       return;
     }
     const grid = make('table');
@@ -98,7 +99,7 @@ export function renderReviewQueue(box: HTMLElement, onUnauthorized: () => void):
       run.append(link, make('div', 'hint', item.instruments.join(', ')));
       row.insertCell().textContent = item.owner.name;
       row.insertCell().textContent = when(item.submitted_at);
-      row.insertCell().append(make('span', 'badge', statusLabel(item.status)));
+      row.insertCell().append(statusBadge(item.status));
       const action = row.insertCell();
       action.append(item.status === 'submitted' ? button('Začni pregled', () => void start(item)) : button('Odpri', () => (location.hash = `pregled/${item.id}`)));
     }
@@ -119,7 +120,7 @@ export function renderReviewQueue(box: HTMLElement, onUnauthorized: () => void):
 
   const load = async () => {
     drawTabs();
-    table.replaceChildren(make('p', undefined, 'Nalagam ...'));
+    table.replaceChildren(skeleton());
     pager.replaceChildren();
     try {
       const { status: code, data } = await getJson(`/api/mentor/backtests?status=${status}&page=${page}`);

@@ -1,4 +1,5 @@
 import { errorMessage, getJson, postJson } from './api';
+import { emptyState } from './ui';
 import { renderReviewQueue } from './reviewQueue';
 import { renderStudentAnalytics } from './studentAnalytics';
 
@@ -77,7 +78,7 @@ async function act(id: number, action: 'accept' | 'decline' | 'end', message: HT
 // Mentorjev dashboard (WF-04): levo Učenci in Povabi učenca, desno prostor za preglede in analitiko, ki sledita.
 export async function renderMentorDashboard(container: HTMLElement, onUnauthorized: () => void): Promise<void> {
   const reload = () => void renderMentorDashboard(container, onUnauthorized);
-  container.innerHTML = '<h2>Dashboard</h2><p>Nalagam ...</p>';
+  container.innerHTML = '<h2>Dashboard</h2><div class="skeleton" role="status" aria-label="Nalagam"><span></span><span></span><span></span><span></span></div>';
   const [loaded, counts] = await Promise.all([loadLinks(), getJson('/api/mentor/students')]);
   if (!loaded || counts.status === 401) return onUnauthorized();
   const countOf = new Map((counts.status === 200 ? (counts.data as Student[]) : []).map((s) => [s.id, s]));
@@ -93,7 +94,7 @@ export async function renderMentorDashboard(container: HTMLElement, onUnauthoriz
     message.textContent = loaded.error;
     students.append(message);
   } else if (loaded.links.length === 0) {
-    students.append(make('p', 'hint', 'Še nimate učencev. Povabite trgovca z e-naslovom.'));
+    students.append(emptyState('Še nimate učencev', 'Povabite trgovca z e-naslovom.'));
   } else {
     const table = make('table');
     table.innerHTML = '<thead><tr><th>Ime</th><th>Stanje</th><th>Testi</th><th>Čaka</th><th></th></tr></thead>';
@@ -157,7 +158,7 @@ export async function renderMentorDashboard(container: HTMLElement, onUnauthoriz
 // Stran Mentor trgovca: čakajoča vabila (sprejmi ali zavrni) in trenutni mentor (prekini povezavo).
 export async function renderTraderMentor(container: HTMLElement, onUnauthorized: () => void): Promise<void> {
   const reload = () => void renderTraderMentor(container, onUnauthorized);
-  container.innerHTML = '<h2>Mentor</h2><p>Nalagam ...</p>';
+  container.innerHTML = '<h2>Mentor</h2><div class="skeleton" role="status" aria-label="Nalagam"><span></span><span></span><span></span><span></span></div>';
   const loaded = await loadLinks();
   if (!loaded) return onUnauthorized();
   container.innerHTML = '<h2>Mentor</h2>';

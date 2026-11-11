@@ -21,7 +21,7 @@ export const clearFlash = () => (flash = '');
 export async function renderStrategyForm(container: HTMLElement, id: string | null, onUnauthorized: () => void): Promise<void> {
   let existing: StrategyDetail | null = null;
   if (id !== null) {
-    container.innerHTML = '<p>Nalagam ...</p>';
+    container.innerHTML = '<div class="skeleton" role="status" aria-label="Nalagam"><span></span><span></span><span></span><span></span></div>';
     const { status, data } = await getJson(`/api/strategies/${encodeURIComponent(id)}`);
     if (status === 401) return onUnauthorized();
     if (status !== 200) {

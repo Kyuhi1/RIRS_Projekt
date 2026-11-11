@@ -8,10 +8,10 @@ export interface CompareSeries {
 
 // Barve in vzorci črt so različni, da so krivulje ločljive tudi brez barv.
 export const SERIES_STYLES = [
-  { color: '#1f5fbf', dash: '' },
-  { color: '#d9730d', dash: '6 3' },
-  { color: '#1b8a5a', dash: '2 3' },
-  { color: '#8a3fb5', dash: '8 3 2 3' },
+  { color: 'var(--series-1)', dash: '' },
+  { color: 'var(--series-2)', dash: '6 3' },
+  { color: 'var(--series-3)', dash: '2 3' },
+  { color: 'var(--series-4)', dash: '8 3 2 3' },
 ];
 
 const NS = 'http://www.w3.org/2000/svg';

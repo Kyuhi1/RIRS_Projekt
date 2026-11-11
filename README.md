@@ -495,6 +495,28 @@ Dokument `docs/05-uporabniske-zgodbe.md` se v kriterijih sklicuje na pravila P1�
 | P7 | Datoteka strategije: ime 3–80 znakov, največ 100 KB, mora biti razčlenljiva; sporočilo napake vsebuje konkreten razlog in vrstico. | poglavje »Nalaganje lastnih strategij« |
 | P8 | Sprememba referenčnih podatkov (borza, načrt financiranega računa, instrument) ne vpliva na že shranjene rezultate: rezultati (metrike, posli, stroški, izid izziva) se izračunajo in shranijo ob zagonu, zapis, ki ga uporablja test, pa se ne izbriše. | poglavje »Vzdrževanje referenčnih podatkov (API)« |
 
+## Vizualni dizajn (design system)
+
+Videz je opisan z enim naborom CSS design tokens v `frontend/src/style.css` (razdelek »Design tokens«). Komponente ne vsebujejo trdo kodiranih barv, zato sprememba tokena spremeni videz cele aplikacije.
+
+| Področje | Odločitev |
+|---|---|
+| Značaj | Moderen in prijazen: kartice z radiusom 8–12 px, mehke sence, topbar. |
+| Barve | Modra/indigo (`--accent`); dobiček `--pos` (zelena), izguba `--neg` (rdeča). |
+| Pisava | Inter (variable), lokalno v `frontend/public/fonts/` (licenca SIL OFL), številke s `tabular-nums`. |
+| Ikone | Lucide kot inline SVG v `frontend/src/icons.ts`, logotip prav tam. |
+
+**Tema (light/dark).** Privzeto sledi sistemski nastavitvi (`prefers-color-scheme`). Gumb v topbaru preklopi temo, izbira se shrani v `localStorage` (ključ `theme`). Majhna skripta v `index.html` nastavi `data-theme` pred prvim izrisom, da ob nalaganju ni utripa. Brez `localStorage` deluje privzeta tema, izbira pa se ne ohrani. Logika je v `frontend/src/theme.ts`.
+
+**Komponente in vzorci.**
+- Gumbi: privzeti (secondary), `button[type=submit]` ali `.primary`, `.danger`, `:disabled`; aktivni filter ima `.active`.
+- Stanja testa (`statusBadge` v `frontend/src/status.ts`): pill z barvo, pikico in besedilom; `in_review` ima rahlo animacijo.
+- Dobiček/izguba: razreda `.pnl-up` in `.pnl-down` dodata ikono ▲/▼ poleg barve, da se razlikujeta tudi brez barve.
+- Stanja UI (`frontend/src/ui.ts`): `skeleton()` namesto »Nalagam …«, `emptyState()` za prazne sezname, `toast()` za napake (npr. nedosegljiv strežnik, neuspela sprememba vidnosti).
+- Graf poteka vrednosti računa ima rahlo polnilo, mrežo in tooltip ob hoverju; barve primerjalnega grafa so tokeni `--series-1..4`.
+
+**Dostopnost in odzivnost.** Vidni focus ringi, kontrast besedila vsaj 4,5:1 v obeh temah, animacije se izklopijo pri `prefers-reduced-motion`. Zasloni so uporabni od 375 px; tabele in grafi se na ozkih zaslonih pomikajo znotraj kartice, strani ne.
+
 ## Zasloni in wireframi
 
 Zasloni ustrezajo wireframom `docs/wireframes/WF-01..WF-06`. Ker so wireframi skica, so zavestne razlike naslednje:
@@ -552,6 +574,8 @@ Merila iz `docs/05-uporabniske-zgodbe.md` so preverjena z avtomatskimi testi bac
 - Sprememba vloge ali blokada uporabnika velja od njegovega naslednjega zahtevka (glej ADR 0006).
 - Obdobje v analitiki se določa po času zadnje oddaje testa.
 - Frontend nima avtomatskih testov v repozitoriju; zasloni so bili preverjeni ročno z brskalnikom.
+- Stanja testa v aplikaciji so Osnutek, Oddan mentorju, V pregledu, Zahtevane spremembe, Odobren in Umaknjen; stanja izvajanja (»queued«, »running«, »failed«) niso del stroja stanj testa (`backend/src/testStatus.ts`).
+- Aplikacija nima ločenega grafa drawdown; največji padec je prikazan kot metrika, graf pa kaže potek vrednosti računa.
 - Izolacija strategij ni popolna varnostna meja (ADR 0008).
 - Stanje projektne table (stolpci Done) vzdržuje ekipa ročno v GitHub Projects.
 

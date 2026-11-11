@@ -44,7 +44,7 @@ export async function renderTrades(container: HTMLElement, backtestId: number, o
     row.insertCell().textContent = `${dateTime(trade.entryTime)} → ${dateTime(trade.exitTime)}`;
     row.insertCell().textContent = `${trade.ticker} (${SIDE_LABELS[trade.side]})`;
     const outcome = row.insertCell();
-    outcome.className = trade.netProfit >= 0 ? 'positive' : 'negative';
+    outcome.className = trade.netProfit >= 0 ? 'pnl-up' : 'pnl-down';
     outcome.textContent = money(trade.netProfit);
   }
 

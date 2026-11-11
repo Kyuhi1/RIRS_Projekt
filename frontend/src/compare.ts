@@ -55,7 +55,7 @@ function row(label: string, cells: (string | HTMLElement)[], className = ''): HT
 
 // Primerjava 2–4 testov (US-09): tabela s tekočimi nastavitvami in metrikami ter skupen graf krivulj.
 export async function renderCompare(container: HTMLElement, idsText: string, onUnauthorized: () => void): Promise<void> {
-  container.innerHTML = '<p><a href="#backtests">← Nazaj na seznam zagonov</a></p><h2>Primerjava testov</h2><div id="compare-body"><p>Nalagam ...</p></div>';
+  container.innerHTML = '<p><a href="#backtests">← Nazaj na seznam zagonov</a></p><h2>Primerjava testov</h2><div id="compare-body"><div class="skeleton" role="status" aria-label="Nalagam"><span></span><span></span><span></span><span></span></div></div>';
   const body = container.querySelector<HTMLElement>('#compare-body')!;
   const { status, data } = await getJson(`/api/backtests/compare?ids=${encodeURIComponent(idsText)}`);
   if (status === 401) return onUnauthorized();
