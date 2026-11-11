@@ -1,7 +1,7 @@
 import { errorMessage, getJson } from './api';
 import { COMPARE_MAX, COMPARE_MIN } from './compare';
-import { statusLabel } from './status';
-import { VISIBILITY_LABELS } from './ui';
+import { statusBadge } from './status';
+import { emptyState, VISIBILITY_LABELS } from './ui';
 import { ASSET_CLASS_LABELS, type Instrument, type Reference } from './refdata';
 
 interface Run {
@@ -29,7 +29,7 @@ export async function renderRuns(container: HTMLElement, ref: Reference, onUnaut
     <h2>Seznam zagonov</h2>
     <div class="presets" id="run-scope" role="group" aria-label="Čigavi zagoni"></div>
     <div class="presets" id="run-filters" role="group" aria-label="Filter po skupini sredstev"></div>
-    <div id="runs-table"><p>Nalagam ...</p></div>
+    <div id="runs-table"><div class="skeleton" role="status" aria-label="Nalagam"><span></span><span></span><span></span><span></span></div></div>
     <div class="compare-bar" id="compare-bar"><button type="button" id="compare-go">Primerjaj</button><p class="hint" id="compare-hint"></p></div>`;
   const table = container.querySelector<HTMLElement>('#runs-table')!;
 
@@ -72,7 +72,7 @@ export async function renderRuns(container: HTMLElement, ref: Reference, onUnaut
   const load = async (): Promise<void> => {
     drawScope();
     drawCompare();
-    table.innerHTML = '<p>Nalagam ...</p>';
+    table.innerHTML = '<div class="skeleton" role="status" aria-label="Nalagam"><span></span><span></span><span></span><span></span></div>';
     const { status, data } = await getJson(`/api/backtests?scope=${scope}`);
     if (status === 401) return onUnauthorized();
     if (status !== 200) {
@@ -115,7 +115,7 @@ export async function renderRuns(container: HTMLElement, ref: Reference, onUnaut
     container.querySelectorAll<HTMLButtonElement>('#run-filters button').forEach((b) => b.classList.toggle('active', b.dataset.filter === active));
     const shown = runs.filter((r) => active === 'all' || r.instruments.some((t) => classOf.get(t) === active));
     if (shown.length === 0) {
-      table.innerHTML = `<p>${scope === 'shared' ? 'Nihče ni delil zagonov' : 'Ni zagonov'}</p>`;
+      table.replaceChildren(scope === 'shared' ? emptyState('Nihče ni delil zagonov') : emptyState('Ni zagonov', 'Ustvarite nov test z obrazcem.'));
       return;
     }
     table.innerHTML = scope === 'shared'
@@ -152,13 +152,10 @@ export async function renderRuns(container: HTMLElement, ref: Reference, onUnaut
       const period = document.createElement('td');
       period.textContent = `${run.from} do ${run.to}`;
       const result = document.createElement('td');
-      result.className = run.summary.netProfit >= 0 ? 'positive' : 'negative';
+      result.className = run.summary.netProfit >= 0 ? 'pnl-up' : 'pnl-down';
       result.textContent = `${money(run.summary.netProfit)} (${money(run.summary.returnPct)} %)`;
       const state = document.createElement('td');
-      const badge = document.createElement('span');
-      badge.className = 'badge';
-      badge.textContent = statusLabel(run.status);
-      state.append(badge);
+      state.append(statusBadge(run.status));
       const visibility = document.createElement('td');
       visibility.textContent = VISIBILITY_LABELS[run.visibility];
 

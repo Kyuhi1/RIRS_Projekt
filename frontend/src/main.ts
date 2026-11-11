@@ -3,6 +3,8 @@ import { PAGE_TITLES, renderPage } from './pages';
 import { renderLogin } from './login';
 import { renderRegister } from './register';
 import { fetchCurrentUser, logout, ROLE_LABELS, type Role, type User } from './session';
+import { icon, LOGO } from './icons';
+import { currentTheme, toggleTheme } from './theme';
 
 // Navigacija po vlogah (WF-02 do WF-06); prva stran je kam se uporabnik preusmeri po prijavi.
 const NAV: Record<Role, string[]> = {
@@ -38,25 +40,50 @@ function renderHeader(current: User, page: string): string {
     .join('');
   return `
     <header class="top">
-      <strong>Backtester</strong>
+      <span class="brand">${LOGO}Backtester</span>
       <nav aria-label="Glavna navigacija">${links}</nav>
       <div class="user-menu">
         <span id="user-name"></span>
-        <button id="logout" type="button">Odjava</button>
+        <button class="theme-toggle" type="button"></button>
+        <button id="logout" type="button">${icon('logout')}Odjava</button>
       </div>
     </header>`;
 }
 
+// Gumb za preklop teme: prikaže ikono teme, na katero preklopi, in ima ustrezen aria-label.
+function paintThemeToggle(button: HTMLElement): void {
+  const dark = currentTheme() === 'dark';
+  button.innerHTML = icon(dark ? 'sun' : 'moon');
+  button.setAttribute('aria-label', dark ? 'Preklopi na svetlo temo' : 'Preklopi na temno temo');
+  button.title = button.getAttribute('aria-label')!;
+}
+
+function bindThemeToggle(): void {
+  const button = app.querySelector<HTMLElement>('.theme-toggle')!;
+  paintThemeToggle(button);
+  button.addEventListener('click', () => {
+    toggleTheme();
+    paintThemeToggle(button);
+  });
+}
+
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  const button = app.querySelector<HTMLElement>('.theme-toggle');
+  if (button) paintThemeToggle(button);
+});
+
 function renderLoggedOut(page: string): void {
   app.innerHTML = `
     <header class="top">
-      <strong>Backtester</strong>
+      <span class="brand">${LOGO}Backtester</span>
       <nav><a href="#prijava">Prijava</a> <a href="#registracija">Registracija</a></nav>
+      <button class="theme-toggle" type="button"></button>
     </header>
     <main class="panels">
       <section id="prijava"></section>
       <section id="registracija"></section>
     </main>`;
+  bindThemeToggle();
   renderLogin(app.querySelector<HTMLElement>('#prijava')!, notice, (loggedIn) => {
     user = loggedIn;
     notice = '';
@@ -72,6 +99,7 @@ function renderLoggedOut(page: string): void {
 
 function renderLoggedIn(current: User, page: string, arg?: string): void {
   app.innerHTML = `${renderHeader(current, page)}<main class="page"></main>`;
+  bindThemeToggle();
   app.querySelector<HTMLElement>('#user-name')!.textContent = `${current.name} (${ROLE_LABELS[current.role]})`;
   app.querySelector('#logout')!.addEventListener('click', async () => {
     await logout();

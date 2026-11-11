@@ -3,6 +3,7 @@ import { renderBacktests } from './backtests';
 import { renderMentorDashboard, renderTraderMentor } from './mentorLinks';
 import { renderResult } from './result';
 import { renderStrategies } from './strategies';
+import { toast } from './ui';
 
 // Strani za posamezne vloge. Vsebina ostalih strani sledi v naslednjih nalogah.
 export const PAGE_TITLES: Record<string, string> = {
@@ -17,6 +18,7 @@ export const PAGE_TITLES: Record<string, string> = {
 
 function showError(container: HTMLElement): void {
   container.insertAdjacentHTML('beforeend', '<p class="error">Strežnik ni dosegljiv, poskusite znova.</p>');
+  toast('Strežnik ni dosegljiv, poskusite znova.');
 }
 
 export function renderPage(container: HTMLElement, page: string, onUnauthorized: () => void, arg?: string): void {

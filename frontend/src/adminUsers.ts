@@ -1,6 +1,6 @@
 import { errorMessage, getJson, patchJson, postJson } from './api';
 import { buildForm, type Field } from './adminForm';
-import { button } from './ui';
+import { button, emptyState } from './ui';
 
 interface AdminUser {
   id: number;
@@ -83,7 +83,7 @@ export function renderUsersTab(box: HTMLElement, onUnauthorized: () => void): vo
       return load();
     }
     if (result.items.length === 0) {
-      table.replaceChildren(make('p', 'hint', search.value.trim() ? 'Ni zadetkov.' : 'Ni uporabnikov.'));
+      table.replaceChildren(emptyState(search.value.trim() ? 'Ni zadetkov' : 'Ni uporabnikov'));
       return void pager.replaceChildren();
     }
     const t = make('table');

@@ -1,7 +1,7 @@
 import { deleteJson, errorMessage, getJson, postJson, putJson } from './api';
 import { buildForm, type Field } from './adminForm';
 import { ASSET_CLASS_LABELS } from './refdata';
-import { button, confirmButton } from './ui';
+import { button, confirmButton, emptyState } from './ui';
 
 type Row = Record<string, any>;
 interface Config {
@@ -114,7 +114,7 @@ export function renderReferenceTab(box: HTMLElement, config: Config, onUnauthori
     const { status, data } = await getJson(`/api/admin/${config.path}?q=${encodeURIComponent(search.value.trim())}`);
     if (status !== 200) return fail(status, data);
     const rows = data as Row[];
-    if (rows.length === 0) return void table.replaceChildren(make('p', 'hint', search.value.trim() ? 'Ni zadetkov.' : 'Ni zapisov.'));
+    if (rows.length === 0) return void table.replaceChildren(emptyState(search.value.trim() ? 'Ni zadetkov' : 'Ni zapisov'));
     const t = make('table');
     t.innerHTML = `<thead><tr>${config.columns.map(() => '<th></th>').join('')}<th></th><th></th></tr></thead>`;
     t.querySelectorAll('th').forEach((th, i) => (th.textContent = i < config.columns.length ? config.columns[i]!.label : i === config.columns.length ? 'Testi' : ''));

@@ -9,7 +9,7 @@ export async function renderBacktests(container: HTMLElement, arg: string | unde
   if (arg?.startsWith('primerjava/')) return renderCompare(container, arg.slice('primerjava/'.length), onUnauthorized);
   if (arg) return renderResult(container, arg, onUnauthorized);
 
-  container.innerHTML = '<p>Nalagam ...</p>';
+  container.innerHTML = '<div class="skeleton" role="status" aria-label="Nalagam"><span></span><span></span><span></span><span></span></div>';
   const ref = await loadReference();
   if (!ref) return onUnauthorized();
 
