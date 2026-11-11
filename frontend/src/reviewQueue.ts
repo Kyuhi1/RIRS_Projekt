@@ -1,5 +1,5 @@
 import { errorMessage, getJson, postJson } from './api';
-import { statusLabel } from './status';
+import { statusLabel, when } from './status';
 
 interface Item {
   id: number;
@@ -36,8 +36,6 @@ function button(label: string, onClick: () => void): HTMLButtonElement {
   node.addEventListener('click', onClick);
   return node;
 }
-
-export const when = (iso: string | null): string => (iso ? new Date(iso).toLocaleString('sl-SI', { dateStyle: 'short', timeStyle: 'short' }) : '–');
 
 // »Zagoni za pregled« (WF-04): zavihki po stanju, tabela s 20 testi na stran in »Začni pregled« pri oddanih.
 export function renderReviewQueue(box: HTMLElement, onUnauthorized: () => void): void {

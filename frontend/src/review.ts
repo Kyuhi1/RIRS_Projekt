@@ -1,5 +1,5 @@
 import { errorMessage, getJson, postJson } from './api';
-import { statusLabel } from './status';
+import { statusLabel, when } from './status';
 import type { Role } from './session';
 
 export interface HistoryEntry {
@@ -39,8 +39,6 @@ function confirmButton(label: string, confirmLabel: string, run: () => void): HT
   return holder;
 }
 
-const when = (iso: string) => new Date(iso).toLocaleString('sl-SI', { dateStyle: 'short', timeStyle: 'short' });
-
 // Ali ima trgovec aktivnega mentorja; null pomeni potekla seja (401), false tudi napako pri nalaganju.
 async function hasActiveMentor(): Promise<boolean | null> {
   const { status, data } = await getJson('/api/mentor-links');
@@ -54,7 +52,7 @@ export async function renderReview(box: HTMLElement, test: ReviewState, reload: 
   message.setAttribute('role', 'alert');
   const actions = make('div', 'review-actions');
 
-  const act = async (action: 'submit' | 'withdraw' | 'start-review') => {
+  const act = async (action: 'submit' | 'withdraw' | 'start-review' | 'request-changes' | 'approve') => {
     message.textContent = '';
     try {
       const { status, data } = await postJson(`/api/backtests/${test.id}/${action}`);
@@ -69,7 +67,20 @@ export async function renderReview(box: HTMLElement, test: ReviewState, reload: 
 
   if (role === 'mentor') {
     if (test.status === 'submitted') actions.append(button('Začni pregled', () => void act('start-review')));
-    else if (test.status === 'in_review') actions.append(make('p', 'hint', 'Pregled poteka.'));
+    else if (test.status === 'in_review') {
+      // Zahteva za spremembe je aktivna šele po vsaj enem komentarju (WF-05).
+      const { status, data } = await getJson(`/api/backtests/${test.id}/comments`);
+      if (status === 401) return onUnauthorized();
+      const hasComments = status === 200 && (data as unknown[]).length > 0;
+      const changes = hasComments
+        ? confirmButton('Zahtevaj spremembe', 'Potrdi zahtevo', () => void act('request-changes'))
+        : button('Zahtevaj spremembe', () => undefined);
+      if (!hasComments) {
+        (changes as HTMLButtonElement).disabled = true;
+        actions.append(changes, make('p', 'hint', 'Najprej dodajte vsaj en komentar.'));
+      } else actions.append(changes);
+      actions.append(confirmButton('Odobri', 'Potrdi odobritev', () => void act('approve')));
+    } else actions.append(make('p', 'hint', 'Pregled je zaključen, komentarji so zaklenjeni.'));
   } else if (test.status === 'draft') {
     const active = await hasActiveMentor();
     if (active === null) return onUnauthorized();

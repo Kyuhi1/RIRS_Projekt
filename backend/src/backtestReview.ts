@@ -56,9 +56,19 @@ async function change(pool: Pool, user: User, id: string, action: Extract<Action
 export const submitBacktest = (pool: Pool, user: User, id: string) => change(pool, user, id, 'submit');
 export const withdrawBacktest = (pool: Pool, user: User, id: string) => change(pool, user, id, 'withdraw');
 
-// Mentor začne pregled oddanega testa svojega aktivnega učenca (US-13): submitted -> in_review.
-// Test, ki ga mentor ne vidi, je 404; v drugem stanju kot submitted je 409.
-export async function startReview(pool: Pool, user: User, id: string): Promise<Result> {
+type ReviewerAction = Extract<Action, 'start-review' | 'request-changes' | 'approve'>;
+
+const WRONG_STATE_REVIEWER: Record<ReviewerAction, string> = {
+  'start-review': 'Pregled je mogoče začeti samo pri oddanem testu',
+  'request-changes': 'Spremembe je mogoče zahtevati samo med pregledom',
+  approve: 'Odobriti je mogoče samo test med pregledom',
+};
+const NO_COMMENT: Result = { status: 409, body: { error: 'Pred zahtevo za spremembe dodajte vsaj en komentar' } };
+
+// Mentorjeva dejanja nad testom svojega aktivnega učenca (US-13, US-14): začetek pregleda, zahteva za
+// spremembe in odobritev. Ena transakcija: zaklenjena vrstica testa, sprememba stanja in zapis v status_history.
+// Test, ki ga mentor ne vidi, je 404; napačno stanje 409; zahteva za spremembe brez komentarja tudi 409.
+async function reviewerAction(pool: Pool, user: User, id: string, action: ReviewerAction): Promise<Result> {
   if (!/^\d{1,15}$/.test(id)) return NOT_FOUND;
   const client = await pool.connect();
   try {
@@ -68,10 +78,17 @@ export async function startReview(pool: Pool, user: User, id: string): Promise<R
       await client.query('ROLLBACK');
       return NOT_FOUND;
     }
-    const outcome = transition(rows[0].status, 'start-review', 'reviewer');
+    const outcome = transition(rows[0].status, action, 'reviewer');
     if (!outcome.ok) {
       await client.query('ROLLBACK');
-      return { status: 409, body: { error: 'Pregled je mogoče začeti samo pri oddanem testu' } };
+      return { status: 409, body: { error: WRONG_STATE_REVIEWER[action] } };
+    }
+    if (action === 'request-changes') {
+      const { rows: counted } = await client.query('SELECT 1 FROM comments WHERE backtest_id = $1 LIMIT 1', [id]);
+      if (counted.length === 0) {
+        await client.query('ROLLBACK');
+        return NO_COMMENT;
+      }
     }
     await client.query('UPDATE backtests SET status = $2 WHERE id = $1', [id, outcome.to]);
     await client.query('INSERT INTO status_history (backtest_id, from_status, to_status, changed_by) VALUES ($1, $2, $3, $4)', [id, rows[0].status, outcome.to, user.id]);
@@ -84,3 +101,7 @@ export async function startReview(pool: Pool, user: User, id: string): Promise<R
   }
   return getBacktest(pool, user, id);
 }
+
+export const startReview = (pool: Pool, user: User, id: string) => reviewerAction(pool, user, id, 'start-review');
+export const requestChanges = (pool: Pool, user: User, id: string) => reviewerAction(pool, user, id, 'request-changes');
+export const approveBacktest = (pool: Pool, user: User, id: string) => reviewerAction(pool, user, id, 'approve');

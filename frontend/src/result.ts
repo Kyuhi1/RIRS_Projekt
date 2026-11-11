@@ -1,5 +1,6 @@
 import { errorMessage, getJson } from './api';
 import { renderEquityChart, type EquityPoint, type Marker } from './equityChart';
+import { renderComments } from './comments';
 import { renderReview, type HistoryEntry } from './review';
 import type { Role } from './session';
 import { statusLabel } from './status';
@@ -181,11 +182,56 @@ export async function renderResult(container: HTMLElement, id: string, onUnautho
   const cards = make('div', r.challenge ? 'cards-two' : '');
   cards.append(costs);
   if (r.challenge) cards.append(rulesSection(r.challenge));
+  const reload = () => void renderResult(container, id, onUnauthorized, role);
   const reviewBox = make('div');
-  const review = section('Mentorski pregled', reviewBox);
-  container.append(header, metrics, review, settings, chart, cards, trades);
-  await Promise.all([
-    renderReview(reviewBox, t, () => void renderResult(container, id, onUnauthorized, role), onUnauthorized, role),
-    renderTrades(tradesBox, t.id, onUnauthorized),
-  ]);
+  const commentsBox = make('div');
+  const pending = [renderTrades(tradesBox, t.id, onUnauthorized)];
+
+  if (role === 'mentor') {
+    // WF-05: levo rezultati samo za branje, desno komentarji, odločitev in zgodovina stanj.
+    const lock = make('p', 'readonly-note', 'Samo za branje: parametrov in rezultatov testa ni mogoče spreminjati.');
+    const mentorMetrics = make('div', 'metrics');
+    mentorMetrics.append(
+      metric('Neto dobiček', money(r.netProfit), sign(r.netProfit)),
+      metric('Donosnost', `${money(r.returnPct)} %`, sign(r.returnPct)),
+      metric('Največji padec', `${r.maxDrawdownPct.toFixed(2)} %`),
+      metric('Delež dobičkonosnih', `${r.winRatePct.toFixed(1)} %`),
+    );
+    const locked = section(
+      'Nastavitve (zaklenjeno)',
+      rows([
+        ['Strategija', t.strategy_name],
+        ['Parametri', params.length ? params.map(([k, v]) => `${k} = ${String(v)}`).join(', ') : 'brez parametrov'],
+        ['Sredstva', t.instruments.join(', ')],
+        ['Borza', venueName],
+        ['Obdobje', `${t.from} do ${t.to}`],
+        ['Začetni kapital', r.initialCapital.toFixed(2)],
+        ['Financiran račun', t.prop_plan ? `${t.prop_plan.firm_name} – ${t.prop_plan.plan_name}` : 'ni izbran'],
+        ['Bruto dobiček', money(r.grossProfit)],
+        ['Provizije', r.costs.commission.toFixed(2)],
+        ['Razpon (spread)', r.costs.spread.toFixed(2)],
+        ['Skupni stroški', r.costs.total.toFixed(2)],
+      ]),
+    );
+    const left = make('div');
+    left.append(mentorMetrics, chart, locked);
+    if (r.challenge) left.append(rulesSection(r.challenge));
+    left.append(trades);
+    const right = make('div');
+    right.append(section('Komentarji', commentsBox), section('Odločitev in zgodovina stanj', reviewBox));
+    const layout = make('div', 'split review-layout');
+    layout.append(left, right);
+    container.append(header, lock, layout);
+    pending.push(renderComments(commentsBox, t.id, t.status, 'mentor', reload, onUnauthorized));
+  } else {
+    const review = section('Mentorski pregled', reviewBox);
+    container.append(header, metrics, review, settings, chart, cards, trades);
+    // Trgovec komentarje mentorja samo bere; razdelek se pokaže, ko je test oddan.
+    if (t.status !== 'draft') {
+      container.append(section('Komentarji mentorja', commentsBox));
+      pending.push(renderComments(commentsBox, t.id, t.status, 'trader', reload, onUnauthorized));
+    }
+  }
+  pending.push(renderReview(reviewBox, t, reload, onUnauthorized, role));
+  await Promise.all(pending);
 }
