@@ -55,6 +55,14 @@ Ob prvem zagonu backend ustvari shemo in referenčne podatke ter administratorja
 
 Format: `data/<TICKER>/<LLLL-MM>.parquet`, minutne svečke s stolpci `open_time` (ms od 1970, UTC), `open`, `high`, `low`, `close`, `volume`. Mapo priklopi `docker-compose.yml` v backend kot `/data` (samo za branje). Podatki se berejo ob vsakem zahtevku, zato po dodajanju datotek ponovni zagon ni potreben. Za testiranje strategij zadošča izbrano obdobje v letu 2025. Sredstva brez podatkov imajo v `GET /api/instruments` `candles: 0`.
 
+Preverjanje (endpoint zahteva prijavo):
+
+```bash
+curl -s -c /tmp/c.txt -X POST http://localhost:18080/api/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"spremeni-me-admin"}'
+curl -s -b /tmp/c.txt http://localhost:18080/api/instruments    # BTCUSDT in EURUSD: candles > 0
+```
+
 Dodatne podatke dodaš v isto strukturo (npr. `data/ETHUSDT/2025-01.parquet`). Samo `2025-*.parquet` v mapah `BTCUSDT` in `EURUSD` sledi Git, vse ostalo v `data/` je v `.gitignore`, da se velike datoteke ne naložijo po pomoti (`.gitignore` prilagodi, če želiš dodati še kaj).
 
 **Demo uporabniki in testi.** Ko aplikacija teče, v mapi `backend` zaženi (zahteva Node.js 24):
