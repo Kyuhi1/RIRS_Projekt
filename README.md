@@ -405,6 +405,11 @@ Ko mentor zahteva spremembe (`changes_requested`), trgovec iz testa naredi ponov
 - **Rezultat testa:** lastnik vidi značko vidnosti in gumb Deli; tuj deljen test se odpre samo za branje (opomba »Deljeni test uporabnika …«, brez mentorskega pregleda in odziva).
 - **Zagoni:** zavihka »Moji zagoni« in »Deljeni zagoni« (tuji zagoni z avtorjem); stolpec Vidnost pri lastnih. Ob vrnitvi na zasebno deljeni zagon takoj izgine iz tujih seznamov.
 
+### Primerjava testov (API)
+
+- `GET /api/backtests/compare?ids=3,7,9` (samo trgovec): primerjava 2–4 testov v vrstnem redu iz `ids`. Za vsak test vrne strategijo, parametre, sredstva, borzo, obdobje, načrt financiranega računa z izidom (`challenge_passed`), avtorja in `results` z `netProfit`, `returnPct`, `tradeCount`, `winRatePct`, `maxDrawdownPct`, `initialCapital` ter `equityCurve` (brez poslov).
+- `400`, če ni od 2 do 4 id-jev, so podvojeni ali neveljavni; `404` za celoto, če je kateri test neobstoječ ali ga trgovec ne sme brati (P1: odgovor ne razkrije, kateri tuji testi obstajajo). Primerljivi so lastni testi in testi, ki jih je drug trgovec delil; pri tujih ni mentorja.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:
