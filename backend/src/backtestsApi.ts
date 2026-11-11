@@ -24,6 +24,11 @@ export const visibleTo = (user: User, param = 2): string =>
         AND EXISTS (SELECT 1 FROM mentor_links l WHERE l.mentor_id = $${param} AND l.trader_id = b.owner_id AND l.status = 'active'))`
     : `b.owner_id = $${param}`;
 
+// Kdo test sme brati: kdor ga vidi (visibleTo), poleg tega vsak trgovec, če je lastnik test delil (visibility = shared).
+// Tuj deljeni test je samo za branje; vsa dejanja (oddaja, umik, ponovitev, komentarji, vidnost) ostanejo lastniku ali mentorju.
+export const viewableBy = (user: User, param = 2): string =>
+  user.role === 'trader' ? `(b.owner_id = $${param} OR b.visibility = 'shared')` : visibleTo(user, param);
+
 const FROM = 'FROM backtests b JOIN strategies s ON s.id = b.strategy_id LEFT JOIN prop_plans pp ON pp.id = b.prop_plan_id';
 
 const asNumber = (value: string | null) => (value === null ? null : Number(value));
@@ -64,18 +69,26 @@ export async function createBacktest(pool: Pool, store: CandleStore, user: User,
   }
 }
 
-// Seznam testov lastnika, najnovejši prvi, s povzetkom rezultatov (brez krivulje in poslov).
-export async function listBacktests(pool: Pool, user: User): Promise<Result> {
-  const { rows } = await pool.query(
-    `${SELECT},
-       jsonb_build_object('netProfit', b.results -> 'netProfit', 'returnPct', b.results -> 'returnPct',
+const SUMMARY = `jsonb_build_object('netProfit', b.results -> 'netProfit', 'returnPct', b.results -> 'returnPct',
          'tradeCount', b.results -> 'tradeCount', 'winRatePct', b.results -> 'winRatePct',
-         'maxDrawdownPct', b.results -> 'maxDrawdownPct') AS summary
-     ${FROM} WHERE b.owner_id = $1 ORDER BY b.id DESC`,
+         'maxDrawdownPct', b.results -> 'maxDrawdownPct')`;
+
+// Seznam testov, najnovejši prvi, s povzetkom rezultatov (brez krivulje in poslov). `mine` (privzeto) so lastni testi,
+// `shared` testi drugih trgovcev z vidnostjo shared; pri tujih so mentor, zgodovina in povezave med testi skriti.
+export async function listBacktests(pool: Pool, user: User, scope: string | null = null): Promise<Result> {
+  const wanted = scope ?? 'mine';
+  if (wanted !== 'mine' && wanted !== 'shared') return { status: 400, body: { errors: { scope: 'Obseg mora biti mine ali shared' } } };
+  const { rows } = await pool.query(
+    `${SELECT}, ${SUMMARY} AS summary ${FROM}
+     WHERE ${wanted === 'mine' ? 'b.owner_id = $1' : "b.visibility = 'shared' AND b.owner_id <> $1"} ORDER BY b.id DESC`,
     [user.id],
   );
-  return { status: 200, body: rows.map(withId) };
+  const items = rows.map(withId);
+  return { status: 200, body: wanted === 'mine' ? items : items.map(hidePrivate) };
 }
+
+// Pri tujem testu so podrobnosti oddaje mentorju (mentor, zgodovina, povezave med testi) zasebne.
+const hidePrivate = <T extends { previous_id: number | null; next_id: number | null }>(test: T) => ({ ...test, reviewer: null, previous_id: null, next_id: null });
 
 // Test vidi lastnik ali (samo za branje) mentor oddanega testa; tuj ali neobstoječ test vrne 404.
 // `owner` je trgovec, ki je test naredil.
@@ -86,8 +99,11 @@ export async function getBacktest(pool: Pool, user: User, id: string, status = 2
        COALESCE((SELECT jsonb_agg(jsonb_build_object('from_status', h.from_status, 'to_status', h.to_status, 'changed_at', h.changed_at,
                    'changed_by', jsonb_build_object('id', c.id::int, 'name', c.name)) ORDER BY h.id)
                  FROM status_history h JOIN users c ON c.id = h.changed_by WHERE h.backtest_id = b.id), '[]'::jsonb) AS history
-     ${FROM} WHERE b.id = $1 AND ${visibleTo(user)}`, [id, user.id]);
-  return rows[0] ? { status, body: withId(rows[0]) } : { status: 404, body: { error: 'Test ne obstaja' } };
+     ${FROM} WHERE b.id = $1 AND ${viewableBy(user)}`, [id, user.id]);
+  if (!rows[0]) return { status: 404, body: { error: 'Test ne obstaja' } };
+  const test = withId(rows[0]) as ReturnType<typeof withId> & { owner: { id: number } };
+  const foreign = user.role === 'trader' && test.owner.id !== user.id; // tuj deljeni test
+  return { status, body: foreign ? { ...hidePrivate(test), history: [] } : test };
 }
 
 export const TRADES_PAGE_SIZE = 20;
@@ -102,7 +118,7 @@ export async function getTrades(pool: Pool, user: User, id: string, page: string
     `SELECT jsonb_array_length(b.results -> 'trades') AS total,
             ARRAY(SELECT x.t FROM jsonb_array_elements(b.results -> 'trades') WITH ORDINALITY AS x(t, n)
                   ORDER BY (x.t ->> 'entryTime')::bigint, x.n OFFSET $3 LIMIT $4) AS trades
-     FROM backtests b WHERE b.id = $1 AND ${visibleTo(user)}`,
+     FROM backtests b WHERE b.id = $1 AND ${viewableBy(user)}`,
     [id, user.id, (number - 1) * TRADES_PAGE_SIZE, TRADES_PAGE_SIZE],
   );
   if (!rows[0]) return { status: 404, body: { error: 'Test ne obstaja' } };
@@ -113,7 +129,7 @@ export async function getTrades(pool: Pool, user: User, id: string, page: string
 // Rezultatov in parametrov izvedenega testa ni mogoče spreminjati: vidni test vrne 403, nevidni 404.
 export async function rejectEdit(pool: Pool, user: User, id: string): Promise<Result> {
   if (!/^\d{1,15}$/.test(id)) return { status: 404, body: { error: 'Test ne obstaja' } };
-  const { rowCount } = await pool.query(`SELECT 1 FROM backtests b WHERE b.id = $1 AND ${visibleTo(user)}`, [id, user.id]);
+  const { rowCount } = await pool.query(`SELECT 1 FROM backtests b WHERE b.id = $1 AND ${viewableBy(user)}`, [id, user.id]);
   if (!rowCount) return { status: 404, body: { error: 'Test ne obstaja' } };
   return { status: 403, body: { error: 'Parametrov in rezultatov testa ni mogoče spreminjati' } };
 }
@@ -153,4 +169,17 @@ export async function retestBacktest(pool: Pool, store: CandleStore, user: User,
     if ((err as { code?: string }).code === '23505') return ALREADY_RETESTED; // sočasna ponovitev istega testa
     throw err;
   }
+}
+
+// Lastnik preklopi vidnost testa med private in shared (US-10). Deljeni test drugi trgovci vidijo samo za branje,
+// ob vrnitvi na private takoj izgine iz njihovih seznamov. Tuj deljeni test je 403, tuj zasebni ali neobstoječ 404.
+export async function setBacktestVisibility(pool: Pool, user: User, id: string, input: unknown): Promise<Result> {
+  if (!/^\d{1,15}$/.test(id)) return { status: 404, body: { error: 'Test ne obstaja' } };
+  const { rows } = await pool.query('SELECT b.owner_id FROM backtests b WHERE b.id = $1 AND ' + viewableBy(user), [id, user.id]);
+  if (!rows[0]) return { status: 404, body: { error: 'Test ne obstaja' } };
+  if (Number(rows[0].owner_id) !== user.id) return { status: 403, body: { error: 'Vidnosti testa lahko spremeni samo njegov lastnik' } };
+  const visibility = input && typeof input === 'object' ? (input as Record<string, unknown>).visibility : undefined;
+  if (visibility !== 'private' && visibility !== 'shared') return { status: 400, body: { errors: { visibility: 'Vidnost mora biti private ali shared' } } };
+  await pool.query('UPDATE backtests SET visibility = $2 WHERE id = $1', [id, visibility]);
+  return getBacktest(pool, user, id);
 }
