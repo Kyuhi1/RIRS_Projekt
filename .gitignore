@@ -8,5 +8,12 @@ node_modules/
 Thumbs.db
 dist/
 
-# Zgodovinski podatki (Parquet), niso del repozitorija
-/data/
+# Zgodovinski podatki (Parquet): v repozitoriju so samo osnovni podatki (BTCUSDT in EURUSD za leto 2025),
+# ostalo (polna zgodovina, druga sredstva) ostane lokalno.
+/data/*
+!/data/BTCUSDT/
+/data/BTCUSDT/*
+!/data/BTCUSDT/2025-*.parquet
+!/data/EURUSD/
+/data/EURUSD/*
+!/data/EURUSD/2025-*.parquet
