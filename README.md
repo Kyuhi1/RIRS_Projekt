@@ -422,6 +422,11 @@ Ko mentor zahteva spremembe (`changes_requested`), trgovec iz testa naredi ponov
 - Šteje samo testi, ki jih mentor sme videti (oddani in naprej, njegov pregled, aktivna povezava), torej brez osnutkov in umaknjenih. Obdobje se presoja po času zadnje oddaje testa.
 - `average`: testi in napake na učenca, delež odobrenih in največji padec pa so združeni čez vse teste (ne povprečje povprečij). Učenec brez testov ima `approvedPct` in `avgMaxDrawdownPct` enaka `null`; brez učencev je `average` enak `null`.
 
+### Analitika učencev (frontend)
+
+- Na mentorjevem dashboardu (panel »Skupna analitika učencev«): izbira obdobja (Zadnjih 30 dni, Zadnjih 90 dni, Vse; privzeto Vse), štiri skupne metrike (testi, odobreni, napake, povprečni največji padec) s povprečjem na učenca in tabela učencev.
+- Prazna stanja: brez aktivnih učencev »Ni aktivnih učencev …«, brez testov v obdobju »… še nimajo testov za analizo«; učenec brez testov ima namesto deleža in padca »–«, ne 0.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:
