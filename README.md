@@ -399,6 +399,12 @@ Ko mentor zahteva spremembe (`changes_requested`), trgovec iz testa naredi ponov
 - **Dostop:** deljeni test sme vsak trgovec brati (`GET /api/backtests/:id`, `/trades`), a samo za branje: `PUT`/`PATCH` na test vrneta `403`, oddaja, umik, ponovitev, komentarji in preklop vidnosti ostanejo lastniku (`404`, pri preklopu vidnosti `403`). Pri tujem testu so mentor, zgodovina stanj in povezave med testi (`previous_id`, `next_id`) skriti. Ob vrnitvi na `private` test takoj izgine iz seznamov in dostopa drugih (`404`). Nov test je vedno `private`.
 - **Mentorji** deljenih testov ne vidijo prek seznama; mentor test še vedno vidi samo po pravilih pregleda (oddan njemu, aktiven učenec). Deljenje testa mentorju ne odpre testov tujih učencev. Administrator nima dostopa.
 
+### Pregled in deljenje (frontend)
+
+- **Strategije:** seznam uporablja katalog (`/api/strategy-catalog`): filtri Vse / Moje / Sistemske / Deljene, iskanje po imenu od 3 znakov, paginacija po 20, prazno stanje »Ni strategij« s povezavo na nalaganje nove strategije. Lastne vrstice imajo gumb **Deli** / **Prekliči deljenje** z dvostopenjsko potrditvijo; tuje deljene strategije so brez Uredi/Izbriši.
+- **Rezultat testa:** lastnik vidi značko vidnosti in gumb Deli; tuj deljen test se odpre samo za branje (opomba »Deljeni test uporabnika …«, brez mentorskega pregleda in odziva).
+- **Zagoni:** zavihka »Moji zagoni« in »Deljeni zagoni« (tuji zagoni z avtorjem); stolpec Vidnost pri lastnih. Ob vrnitvi na zasebno deljeni zagon takoj izgine iz tujih seznamov.
+
 ## Testiranje
 
 Testi se izvajajo v containerju backenda, ker ta doseže bazo:
